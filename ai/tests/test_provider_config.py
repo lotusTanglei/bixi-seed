@@ -33,3 +33,15 @@ class ProviderConfigTest(TestCase):
         config.refresh_from_db()
         self.assertNotEqual(config.api_key_encrypted, "secret-api-key")
         self.assertEqual(config.get_api_key(), "secret-api-key")
+
+    def test_invalid_provider_is_rejected(self):
+        user = User.objects.create_user("provider-owner", "test-password-123")
+        Permission.objects.bulk_create(
+            [Permission(code=code, name=name, description=description) for code, name, description in DEFAULT_PERMISSIONS]
+        )
+        create_organization(user=user, name="Provider Test")
+        self.client.force_login(user)
+        response = self.client.patch(
+            "/api/ai/config/", {"provider": "unsupported"}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)

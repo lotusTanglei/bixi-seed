@@ -49,3 +49,12 @@ class FileKitTest(SimpleTestCase):
     def test_excel_parser_enforces_row_limit(self):
         with self.assertRaises(ExcelParseError):
             parse_excel_upload(make_excel_upload(), max_rows=1)
+
+    def test_upload_storage_enforces_extension_size_and_category(self):
+        with TemporaryDirectory() as directory, override_settings(BIXI_UPLOAD_ROOT=directory):
+            with self.assertRaises(UploadError):
+                store_uploaded_file(SimpleUploadedFile("notes.txt", b"text"), allowed_extensions={".xlsx"})
+            with self.assertRaises(UploadError):
+                store_uploaded_file(SimpleUploadedFile("notes.txt", b"12345"), max_bytes=4)
+            with self.assertRaises(UploadError):
+                store_uploaded_file(SimpleUploadedFile("notes.txt", b"text"), category="bad/category")

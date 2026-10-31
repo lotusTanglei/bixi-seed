@@ -73,6 +73,8 @@ def validate_manifest(manifest):
                 not isinstance(field[bound], (int, float)) or isinstance(field[bound], bool)
             ):
                 errors.append(f"{prefix}.{bound} 必须是数字")
+        if field_type != "number" and ("min" in field or "max" in field):
+            errors.append(f"{prefix}.min/max 只能用于 number 字段")
         if "min" in field and "max" in field and field["min"] > field["max"]:
             errors.append(f"{prefix}.min 不能大于 max")
 

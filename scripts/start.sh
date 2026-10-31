@@ -17,7 +17,7 @@ nohup "$PROJECT_ROOT/scripts/run-core.sh" > "$LOG_DIR/server.out.log" 2> "$LOG_D
 
 port="$(configured_port)"
 bind_host="$(configured_bind_host)"
-for _ in $(seq 1 20); do
+for _ in $(seq 1 40); do
   sleep 0.25
   if health_check; then
     echo "Bixi Seed 已在后台启动，地址: http://${bind_host}:${port}"

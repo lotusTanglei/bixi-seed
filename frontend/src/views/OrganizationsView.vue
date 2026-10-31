@@ -16,7 +16,21 @@ interface Member {
   role_id: number;
   is_owner: boolean;
   is_active: boolean;
+  status: "invited" | "active" | "disabled";
+  invited_at?: string | null;
+  accepted_at?: string | null;
   created_at: string;
+}
+
+interface Invitation {
+  id: number;
+  username: string;
+  display_name: string;
+  role: string;
+  role_id: number;
+  expires_at: string;
+  created_at: string;
+  status: string;
 }
 
 interface Role {
@@ -58,6 +72,9 @@ const members = ref<Member[]>([]);
 const roles = ref<Role[]>([]);
 const permissions = ref<Permission[]>([]);
 const auditLogs = ref<AuditLog[]>([]);
+const invitations = ref<Invitation[]>([]);
+const auditPagination = reactive({ page: 1, page_size: 20, total: 0 });
+const auditFilters = reactive({ action: "", object_type: "", success: "", date_from: "", date_to: "" });
 const loading = ref(true);
 const memberDialog = ref(false);
 const roleDialog = ref(false);
@@ -69,6 +86,11 @@ const organizationDialog = ref(false);
 const organizationName = ref("");
 const organizationParentId = ref<string | null>(null);
 const organizationSaving = ref(false);
+const inviteDialog = ref(false);
+const inviteSaving = ref(false);
+const inviteToken = ref("");
+const inviteForm = reactive({ username: "", display_name: "", contact: "", role_id: 0 });
+const transferSaving = ref(false);
 const editingRole = ref<Role | null>(null);
 const permissionRole = ref<Role | null>(null);
 const editingMember = ref<Member | null>(null);
@@ -161,6 +183,70 @@ async function createOrganization() {
   }
 }
 
+function openInviteDialog() {
+  inviteForm.username = "";
+  inviteForm.display_name = "";
+  inviteForm.contact = "";
+  inviteForm.role_id = roles.value.find((role) => role.code === "member")?.id ?? roles.value[0]?.id ?? 0;
+  inviteToken.value = "";
+  inviteDialog.value = true;
+}
+
+async function inviteMember() {
+  inviteSaving.value = true;
+  try {
+    const response = await api<{ token: string }>("/organizations/invitations/", {
+      method: "POST",
+      body: { ...inviteForm },
+    });
+    inviteToken.value = response.token;
+    ElMessage.success("邀请已生成");
+    await load();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "生成邀请失败");
+  } finally {
+    inviteSaving.value = false;
+  }
+}
+
+async function revokeInvitation(invitation: Invitation) {
+  try {
+    await ElMessageBox.confirm(`确定撤销 ${invitation.username} 的邀请？`, "撤销邀请", { type: "warning" });
+    await api(`/organizations/invitations/${invitation.id}/`, { method: "DELETE" });
+    ElMessage.success("邀请已撤销");
+    await load();
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error instanceof Error ? error.message : "撤销邀请失败");
+  }
+}
+
+async function transferOwner(member: Member) {
+  try {
+    await ElMessageBox.confirm(`确定将所有权转移给 ${member.display_name}？`, "转移所有权", { type: "warning" });
+    transferSaving.value = true;
+    await api("/organizations/transfer-owner/", { method: "POST", body: { user_id: member.id, confirm: true } });
+    await session.refresh();
+    ElMessage.success("所有权已转移");
+    await load();
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error instanceof Error ? error.message : "转移所有权失败");
+  } finally {
+    transferSaving.value = false;
+  }
+}
+
+async function leaveOrganization() {
+  try {
+    await ElMessageBox.confirm("退出后将无法继续访问当前组织，确定继续？", "退出组织", { type: "warning" });
+    await api("/organizations/leave/", { method: "POST", body: {} });
+    await session.refresh();
+    ElMessage.success("已退出组织");
+    await load();
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error instanceof Error ? error.message : "退出组织失败");
+  }
+}
+
 async function load() {
   loading.value = true;
   try {
@@ -168,17 +254,26 @@ async function load() {
       canReadMembers.value ? api<Member[]>("/organizations/members/").catch(() => null) : Promise.resolve(null),
       canManageRoles.value ? api<Role[]>("/organizations/roles/").catch(() => null) : Promise.resolve(null),
       canManageRoles.value ? api<Permission[]>("/organizations/permissions/").catch(() => null) : Promise.resolve(null),
-      canReadAudit.value ? api<AuditLog[]>("/organizations/audit-logs/").catch(() => null) : Promise.resolve(null),
+      canReadAudit.value ? api<{ items: AuditLog[]; pagination: typeof auditPagination }>(`/organizations/audit-logs/?page=${auditPagination.page}&page_size=${auditPagination.page_size}&${new URLSearchParams(Object.entries(auditFilters).filter(([, value]) => value) as string[][]).toString()}`).catch(() => null) : Promise.resolve(null),
+      canManageMembers.value ? api<Invitation[]>("/organizations/invitations/").catch(() => null) : Promise.resolve(null),
     ]);
     members.value = results[0] ?? [];
     roles.value = results[1] ?? [];
     permissions.value = results[2] ?? [];
-    auditLogs.value = results[3] ?? [];
+    const audit = results[3] as { items: AuditLog[]; pagination: typeof auditPagination } | null;
+    auditLogs.value = audit?.items ?? [];
+    if (audit?.pagination) Object.assign(auditPagination, audit.pagination);
+    invitations.value = (results[4] as Invitation[] | null) ?? [];
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "无法加载组织数据");
   } finally {
     loading.value = false;
   }
+}
+
+function applyAuditFilters() {
+  auditPagination.page = 1;
+  load();
 }
 
 async function selectOrganization(node: OrganizationTreeNode) {
@@ -345,7 +440,8 @@ onMounted(load);
   </div>
 
   <div class="organization-toolbar">
-    <el-button v-if="canManageMembers" type="primary" :icon="Plus" @click="openMemberDialog()">新增成员</el-button>
+    <el-button v-if="canManageMembers" type="primary" :icon="Plus" @click="openInviteDialog">邀请成员</el-button>
+    <el-button v-if="canManageMembers" :icon="Plus" @click="openMemberDialog()">直接加入</el-button>
     <el-button v-if="canManageRoles" :icon="Plus" @click="openRoleDialog()">新增角色</el-button>
   </div>
 
@@ -425,6 +521,7 @@ onMounted(load);
                 @click="toggleMember(row)"
               />
               <el-button v-if="canManageMembers" link type="danger" :icon="Delete" title="移除成员" aria-label="移除成员" @click="removeMember(row)" />
+              <el-button v-if="session.activeOrganization?.is_owner" link title="转移所有权" aria-label="转移所有权" @click="transferOwner(row)">转移所有权</el-button>
             </template>
           </template>
         </el-table-column>
@@ -457,12 +554,30 @@ onMounted(load);
     </section>
   </div>
 
+  <section v-if="canManageMembers && invitations.length" class="surface-section invitation-section" v-loading="loading">
+    <div class="section-heading"><div><h2>待接受邀请</h2><p>{{ invitations.length }} 个邀请等待接受。</p></div></div>
+    <el-table :data="invitations" size="small">
+      <el-table-column prop="username" label="待接受账号" />
+      <el-table-column prop="role" label="角色" />
+      <el-table-column prop="expires_at" label="过期时间" />
+      <el-table-column label="操作" width="90"><template #default="{ row }"><el-button link type="danger" @click="revokeInvitation(row)">撤销</el-button></template></el-table-column>
+    </el-table>
+  </section>
+
   <section v-if="canReadAudit" class="surface-section audit-section" v-loading="loading">
     <div class="section-heading">
       <div>
         <h2>操作审计</h2>
-        <p>最近 200 条组织变更和 AI 操作记录。</p>
+        <p>组织变更和 AI 操作记录。</p>
       </div>
+    </div>
+    <div class="audit-filters">
+      <el-input v-model="auditFilters.action" clearable placeholder="操作" @keyup.enter="applyAuditFilters" />
+      <el-input v-model="auditFilters.object_type" clearable placeholder="对象类型" @keyup.enter="applyAuditFilters" />
+      <el-select v-model="auditFilters.success" clearable placeholder="结果"><el-option label="成功" value="true" /><el-option label="失败" value="false" /></el-select>
+      <el-date-picker v-model="auditFilters.date_from" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
+      <el-date-picker v-model="auditFilters.date_to" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+      <el-button :icon="Refresh" @click="applyAuditFilters">筛选</el-button>
     </div>
     <el-table :data="auditLogs" size="small" empty-text="暂无审计记录">
       <el-table-column prop="created_at" label="时间" width="190" />
@@ -475,6 +590,11 @@ onMounted(load);
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination v-if="auditPagination.total > auditPagination.page_size" v-model:current-page="auditPagination.page" :page-size="auditPagination.page_size" layout="total, prev, pager, next" :total="auditPagination.total" @current-change="load" />
+  </section>
+
+  <section v-if="session.activeOrganization && !session.activeOrganization.is_owner" class="organization-exit-actions">
+    <el-button type="danger" plain @click="leaveOrganization">退出当前组织</el-button>
   </section>
 
   <el-dialog v-model="organizationDialog" title="新建组织" width="420px">
@@ -517,6 +637,17 @@ onMounted(load);
       <el-button @click="memberDialog = false">取消</el-button>
       <el-button type="primary" :loading="memberSaving" :disabled="!memberForm.username || !memberForm.display_name || !memberForm.contact || (!editingMember && !memberForm.password) || !memberForm.role_id" @click="saveMember">保存</el-button>
     </template>
+  </el-dialog>
+
+  <el-dialog v-model="inviteDialog" title="邀请成员" width="460px">
+    <el-form label-position="top">
+      <el-form-item label="账号" required><el-input v-model="inviteForm.username" :disabled="Boolean(inviteToken)" /></el-form-item>
+      <el-form-item label="姓名"><el-input v-model="inviteForm.display_name" :disabled="Boolean(inviteToken)" /></el-form-item>
+      <el-form-item label="联系方式"><el-input v-model="inviteForm.contact" :disabled="Boolean(inviteToken)" /></el-form-item>
+      <el-form-item label="角色" required><el-select v-model="inviteForm.role_id" class="full-width" :disabled="Boolean(inviteToken)"><el-option v-for="role in roles.filter((item) => item.code !== 'owner')" :key="role.id" :label="role.name" :value="role.id" /></el-select></el-form-item>
+      <el-alert v-if="inviteToken" type="success" :closable="false" title="一次性邀请令牌" :description="inviteToken" />
+    </el-form>
+    <template #footer><el-button @click="inviteDialog = false">关闭</el-button><el-button v-if="!inviteToken" type="primary" :loading="inviteSaving" :disabled="!inviteForm.username || !inviteForm.role_id" @click="inviteMember">生成邀请</el-button></template>
   </el-dialog>
 
   <el-dialog v-model="roleDialog" :title="editingRole ? '编辑角色资料' : '新增角色'" width="460px">

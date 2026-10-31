@@ -108,6 +108,14 @@ class ConversationListView(APIView):
             user=request.user,
             title=str(request.data.get("title", "")).strip()[:200],
         )
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="ai.conversation.created",
+            object_type="conversation",
+            object_id=conversation.pk,
+            metadata={},
+        )
         return Response(_conversation_payload(conversation), status=201)
 
 
@@ -151,6 +159,14 @@ class ChatView(APIView):
                 user=request.user,
                 title=content[:40],
             )
+            write_audit(
+                organization=membership.organization,
+                actor=request.user,
+                action="ai.conversation.created",
+                object_type="conversation",
+                object_id=conversation.pk,
+                metadata={},
+            )
         try:
             provider = get_provider(membership.organization)
         except ProviderConfigurationError as exc:
@@ -172,9 +188,26 @@ class ChatView(APIView):
                     role="assistant",
                     content="".join(assistant_parts),
                 )
+                write_audit(
+                    organization=conversation.organization,
+                    actor=request.user,
+                    action="ai.conversation.completed",
+                    object_type="conversation",
+                    object_id=conversation.pk,
+                    metadata={"message_id": assistant.pk},
+                )
                 yield _event("done", {"message_id": assistant.id})
             except Exception:
                 logger.exception("AI completion failed")
+                write_audit(
+                    organization=conversation.organization,
+                    actor=request.user,
+                    action="ai.conversation.completed",
+                    object_type="conversation",
+                    object_id=conversation.pk,
+                    metadata={},
+                    success=False,
+                )
                 yield _event("error", {"message": "AI 服务调用失败，请检查模型配置"})
 
         response = StreamingHttpResponse(stream(), content_type="text/event-stream; charset=utf-8")

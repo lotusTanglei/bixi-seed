@@ -86,6 +86,6 @@ managed_pid() {
   server_pid="$(tr -d '[:space:]' < "$PID_FILE")"
   [[ "$server_pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$server_pid" 2>/dev/null || return 1
-  ps -p "$server_pid" -o command= 2>/dev/null | grep -q "uvicorn.*config.asgi:application" || return 1
+  ps -p "$server_pid" -o command= 2>/dev/null | grep -Eq "(scripts/run-core\.sh|uvicorn.*config\.asgi:application)" || return 1
   echo "$server_pid"
 }

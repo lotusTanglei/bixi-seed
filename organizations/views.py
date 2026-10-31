@@ -3,16 +3,18 @@ import uuid
 
 from django.db import transaction
 from django.db.models import Count, Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
 
-from .models import AuditLog, Membership, Permission, Role, RolePermission
+from .models import AuditLog, MemberInvitation, Membership, Permission, Role, RolePermission
 from .services import (
     PERMISSION_METADATA,
     can_assign_role,
+    create_invitation,
     create_organization,
     get_assignable_permissions,
     get_active_organization,
@@ -20,6 +22,7 @@ from .services import (
     get_user_memberships,
     membership_has_permission,
     organization_path,
+    sync_membership_status,
     user_has_permission,
     write_audit,
 )
@@ -49,7 +52,10 @@ def member_payload(item):
         "role": item.role.name,
         "role_id": item.role_id,
         "is_owner": item.is_owner,
-        "is_active": item.is_active,
+        "status": item.status,
+        "is_active": item.status == "active",
+        "invited_at": item.invited_at,
+        "accepted_at": item.accepted_at,
         "created_at": item.created_at,
     }
 
@@ -65,7 +71,7 @@ def parse_bool(value):
 def role_payload(item):
     member_count = getattr(item, "member_count", None)
     if member_count is None:
-        member_count = item.memberships.filter(is_active=True).count()
+        member_count = item.memberships.filter(status="active", is_active=True).count()
     return {
         "id": item.id,
         "code": item.code,
@@ -83,7 +89,6 @@ def parse_role_permissions(membership, values, preserved_codes=None):
     if len(permissions) != len(codes):
         return None, "包含不存在的权限"
     allowed_codes = set(get_assignable_permissions(membership).values_list("code", flat=True))
-    allowed_codes.update(preserved_codes or set())
     unauthorized_codes = sorted(set(codes) - allowed_codes)
     if unauthorized_codes:
         return None, "不能分配当前账号没有的权限"
@@ -104,8 +109,9 @@ class OrganizationListView(APIView):
         )
 
     def post(self, request):
-        name = str(request.data.get("name", "")).strip()
-        if not name or len(name) > 160:
+        raw_name = request.data.get("name", "")
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        if not name or len(name) > 160 or any(ord(char) < 32 for char in name):
             return Response({"detail": "组织名称不能为空"}, status=status.HTTP_400_BAD_REQUEST)
         parent_id = request.data.get("parent_id")
         parent = None
@@ -147,6 +153,8 @@ class CurrentOrganizationView(APIView):
 
 class MemberListView(APIView):
     def get(self, request):
+        if get_active_membership(request) is None:
+            return Response([])
         if not user_has_permission(request, "member.read"):
             return Response({"detail": "没有查看成员的权限"}, status=status.HTTP_403_FORBIDDEN)
         membership = get_active_membership(request)
@@ -157,6 +165,8 @@ class MemberListView(APIView):
 
     @transaction.atomic
     def post(self, request):
+        if get_active_membership(request) is None:
+            return Response({"detail": "当前用户没有组织"}, status=status.HTTP_404_NOT_FOUND)
         if not user_has_permission(request, "member.manage"):
             return Response({"detail": "没有管理成员的权限"}, status=status.HTTP_403_FORBIDDEN)
         membership = get_active_membership(request)
@@ -197,8 +207,8 @@ class MemberListView(APIView):
             return Response({"detail": "所有者不能通过成员接口修改"}, status=status.HTTP_400_BAD_REQUEST)
         if existing:
             existing.role = role
-            existing.is_active = True
-            existing.save(update_fields=["role", "is_active"])
+            sync_membership_status(existing, "active", save=False)
+            existing.save(update_fields=["role", "status", "is_active"])
             created = False
             target = existing
         else:
@@ -213,7 +223,7 @@ class MemberListView(APIView):
         write_audit(
             organization=membership.organization,
             actor=request.user,
-            action="member.added" if created else "member.reactivated",
+            action="member.added" if created else "member.rejoined",
             object_type="membership",
             object_id=target.pk,
             metadata={"username": user.username, "role": role.code},
@@ -250,8 +260,14 @@ class MemberDetailView(APIView):
             is_active = parse_bool(request.data["is_active"])
             if is_active is None:
                 return Response({"detail": "is_active 必须是布尔值"}, status=status.HTTP_400_BAD_REQUEST)
-            target.is_active = is_active
-            changes.append("is_active")
+            sync_membership_status(target, "active" if is_active else "disabled", save=False)
+            changes.append("status")
+        if "status" in request.data:
+            requested_status = request.data["status"]
+            if requested_status not in {"active", "disabled"}:
+                return Response({"detail": "status 只能是 active 或 disabled"}, status=status.HTTP_400_BAD_REQUEST)
+            sync_membership_status(target, requested_status, save=False)
+            changes.append("status")
         if "display_name" in request.data:
             display_name = str(request.data["display_name"]).strip()
             if not display_name:
@@ -265,14 +281,20 @@ class MemberDetailView(APIView):
             target.user.contact = contact
             user_changes.append("contact")
         if changes:
-            target.save(update_fields=list(set(changes)))
+            fields_to_save = set(changes)
+            if "status" in fields_to_save:
+                fields_to_save.add("is_active")
+            target.save(update_fields=list(fields_to_save))
         if user_changes:
             target.user.save(update_fields=list(set(user_changes)))
         if changes or user_changes:
+            audit_action = "member.updated"
+            if "status" in changes:
+                audit_action = "member.restored" if target.status == "active" else "member.disabled"
             write_audit(
                 organization=current.organization,
                 actor=request.user,
-                action="member.updated",
+                action=audit_action,
                 object_type="membership",
                 object_id=target.pk,
                 metadata={"changes": changes + user_changes},
@@ -301,6 +323,201 @@ class MemberDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class MemberInvitationListView(APIView):
+    def get(self, request):
+        if not user_has_permission(request, "member.manage"):
+            return Response({"detail": "没有管理成员的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        now = timezone.now()
+        MemberInvitation.objects.filter(
+            organization=membership.organization, status="pending", expires_at__lte=now
+        ).update(status="expired")
+        invitations = MemberInvitation.objects.select_related("user", "role").filter(
+            organization=membership.organization, status="pending"
+        )
+        return Response(
+            [
+                {
+                    "id": item.id,
+                    "username": item.user.username,
+                    "display_name": item.user.display_name or item.user.username,
+                    "role": item.role.name,
+                    "role_id": item.role_id,
+                    "expires_at": item.expires_at,
+                    "created_at": item.created_at,
+                    "status": item.status,
+                }
+                for item in invitations
+            ]
+        )
+
+    @transaction.atomic
+    def post(self, request):
+        if not user_has_permission(request, "member.manage"):
+            return Response({"detail": "没有管理成员的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        username = str(request.data.get("username", "")).strip().casefold()
+        display_name = str(request.data.get("display_name", "")).strip()
+        contact = str(request.data.get("contact", "")).strip()
+        role_id = request.data.get("role_id")
+        if not USERNAME_RE.fullmatch(username):
+            return Response({"detail": "账号必须是 2 到 80 个不能包含空白的字符"}, status=status.HTTP_400_BAD_REQUEST)
+        if len(display_name) > 120 or len(contact) > 120:
+            return Response({"detail": "姓名和联系方式不能超过 120 个字符"}, status=status.HTTP_400_BAD_REQUEST)
+        role = Role.objects.filter(organization=membership.organization, id=role_id).first()
+        if role is None:
+            return Response({"detail": "角色不存在"}, status=status.HTTP_400_BAD_REQUEST)
+        if role.code == "owner":
+            return Response({"detail": "不能把所有者角色分配给普通成员"}, status=status.HTTP_400_BAD_REQUEST)
+        if not can_assign_role(membership, role):
+            return Response({"detail": "不能把权限高于当前账号的角色分配给成员"}, status=status.HTTP_403_FORBIDDEN)
+        user, created = User.objects.get_or_create(
+            username=username,
+            defaults={"display_name": display_name, "contact": contact, "is_active": True},
+        )
+        if created:
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+        else:
+            if display_name and user.display_name != display_name:
+                user.display_name = display_name
+            if contact and user.contact != contact:
+                user.contact = contact
+            if display_name or contact:
+                user.save(update_fields=["display_name", "contact"])
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+        target, _ = Membership.objects.get_or_create(
+            organization=membership.organization,
+            user=user,
+            defaults={
+                "role": role,
+                "status": "invited",
+                "is_active": False,
+                "invited_at": timezone.now(),
+                "invited_by": request.user,
+            },
+        )
+        if target.is_owner:
+            return Response({"detail": "所有者不能通过邀请接口修改"}, status=status.HTTP_400_BAD_REQUEST)
+        target.role = role
+        target.invited_at = timezone.now()
+        target.invited_by = request.user
+        sync_membership_status(target, "invited", save=False)
+        target.save(update_fields=["role", "status", "is_active", "invited_at", "invited_by"])
+        invitation, raw_token = create_invitation(
+            organization=membership.organization,
+            user=user,
+            role=role,
+            created_by=request.user,
+        )
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="member.invited",
+            object_type="member_invitation",
+            object_id=invitation.pk,
+            metadata={"username": user.username, "role": role.code},
+        )
+        return Response(
+            {
+                "id": invitation.id,
+                "username": user.username,
+                "role": role.name,
+                "expires_at": invitation.expires_at,
+                "token": raw_token,
+                "accept_url": f"/api/auth/invitations/{raw_token}/accept/",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MemberInvitationDetailView(APIView):
+    @transaction.atomic
+    def delete(self, request, invitation_id):
+        if not user_has_permission(request, "member.manage"):
+            return Response({"detail": "没有管理成员的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        invitation = MemberInvitation.objects.filter(
+            id=invitation_id, organization=membership.organization, status="pending"
+        ).first()
+        if invitation is None:
+            return Response({"detail": "邀请不存在"}, status=status.HTTP_404_NOT_FOUND)
+        invitation.status = "revoked"
+        invitation.save(update_fields=["status"])
+        target = Membership.objects.filter(organization=membership.organization, user=invitation.user).first()
+        if target and not target.is_owner and target.status == "invited":
+            target.delete()
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="member.invitation.revoked",
+            object_type="member_invitation",
+            object_id=invitation.pk,
+            metadata={"username": invitation.user.username},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TransferOwnerView(APIView):
+    @transaction.atomic
+    def post(self, request):
+        current = get_active_membership(request)
+        if current is None or not current.is_owner:
+            return Response({"detail": "只有所有者可以转移所有权"}, status=status.HTTP_403_FORBIDDEN)
+        if request.data.get("confirm") is not True:
+            return Response({"detail": "请确认所有权转移"}, status=status.HTTP_400_BAD_REQUEST)
+        target = Membership.objects.select_for_update().select_related("user").filter(
+            organization=current.organization,
+            user_id=request.data.get("user_id"),
+            status="active",
+        ).first()
+        if target is None:
+            return Response({"detail": "目标成员不存在"}, status=status.HTTP_404_NOT_FOUND)
+        if target.pk == current.pk:
+            return Response({"detail": "不能转移给自己"}, status=status.HTTP_400_BAD_REQUEST)
+        owner_role = Role.objects.get(organization=current.organization, code="owner")
+        admin_role = Role.objects.get(organization=current.organization, code="admin")
+        current.is_owner = False
+        current.role = admin_role
+        current.save(update_fields=["is_owner", "role"])
+        target.is_owner = True
+        target.role = owner_role
+        target.save(update_fields=["is_owner", "role"])
+        write_audit(
+            organization=current.organization,
+            actor=request.user,
+            action="organization.owner.transferred",
+            object_type="membership",
+            object_id=target.pk,
+            metadata={"from_user_id": current.user_id, "to_user_id": target.user_id},
+        )
+        return Response({"from_user_id": current.user_id, "to_user_id": target.user_id})
+
+
+class LeaveOrganizationView(APIView):
+    @transaction.atomic
+    def post(self, request):
+        current = get_active_membership(request)
+        if current is None:
+            return Response({"detail": "当前用户没有组织"}, status=status.HTTP_404_NOT_FOUND)
+        if current.is_owner:
+            return Response({"detail": "所有者必须先转移所有权"}, status=status.HTTP_400_BAD_REQUEST)
+        organization = current.organization
+        current.delete()
+        request.session.pop("bixi_active_organization_id", None)
+        request.session.modified = True
+        write_audit(
+            organization=organization,
+            actor=request.user,
+            action="member.left",
+            object_type="membership",
+            object_id=request.user.pk,
+            metadata={},
+        )
+        return Response({"status": "left"})
+
+
 class RoleListView(APIView):
     def get(self, request):
         if not user_has_permission(request, "role.manage"):
@@ -309,7 +526,7 @@ class RoleListView(APIView):
         roles = (
             Role.objects.prefetch_related("permissions")
             .filter(organization=membership.organization)
-            .annotate(member_count=Count("memberships", filter=Q(memberships__is_active=True)))
+            .annotate(member_count=Count("memberships", filter=Q(memberships__status="active", memberships__is_active=True)))
         )
         return Response([role_payload(item) for item in roles])
 
@@ -353,7 +570,7 @@ class RoleListView(APIView):
         role = (
             Role.objects.prefetch_related("permissions")
             .filter(pk=role.pk)
-            .annotate(member_count=Count("memberships", filter=Q(memberships__is_active=True)))
+            .annotate(member_count=Count("memberships", filter=Q(memberships__status="active", memberships__is_active=True)))
             .get()
         )
         return Response(role_payload(role), status=status.HTTP_201_CREATED)
@@ -379,11 +596,7 @@ class RoleDetailView(APIView):
                 return Response({"detail": "permissions 必须是数组"}, status=status.HTTP_400_BAD_REQUEST)
             if not all(isinstance(item, str) for item in codes):
                 return Response({"detail": "permissions 必须是字符串数组"}, status=status.HTTP_400_BAD_REQUEST)
-            permissions, permission_error = parse_role_permissions(
-                current,
-                codes,
-                preserved_codes=set(role.permissions.values_list("code", flat=True)),
-            )
+            permissions, permission_error = parse_role_permissions(current, codes)
             if permission_error:
                 error_status = status.HTTP_403_FORBIDDEN if permission_error.startswith("不能") else status.HTTP_400_BAD_REQUEST
                 return Response({"detail": permission_error}, status=error_status)
@@ -400,7 +613,7 @@ class RoleDetailView(APIView):
         write_audit(
             organization=current.organization,
             actor=request.user,
-            action="role.updated",
+            action="role.permissions.updated" if "permissions" in request.data else "role.updated",
             object_type="role",
             object_id=role.pk,
             metadata={"changes": list(request.data.keys())},
@@ -409,7 +622,7 @@ class RoleDetailView(APIView):
         role = (
             Role.objects.prefetch_related("permissions")
             .filter(pk=role.pk)
-            .annotate(member_count=Count("memberships", filter=Q(memberships__is_active=True)))
+            .annotate(member_count=Count("memberships", filter=Q(memberships__status="active", memberships__is_active=True)))
             .get()
         )
         return Response(role_payload(role))
@@ -461,12 +674,48 @@ class PermissionCatalogView(APIView):
 
 class AuditLogListView(APIView):
     def get(self, request):
-        if not user_has_permission(request, "audit.read"):
+        if request.user.is_superuser:
+            logs = AuditLog.objects.select_related("actor").filter(scope=request.query_params.get("scope", "organization"))
+            organization = get_active_organization(request)
+            if request.query_params.get("scope", "organization") != "system":
+                logs = logs.filter(organization=organization)
+        elif not user_has_permission(request, "audit.read"):
             return Response({"detail": "没有查看审计日志的权限"}, status=status.HTTP_403_FORBIDDEN)
-        membership = get_active_membership(request)
-        logs = AuditLog.objects.select_related("actor").filter(organization=membership.organization)[:200]
+        else:
+            membership = get_active_membership(request)
+            logs = AuditLog.objects.select_related("actor").filter(
+                organization=membership.organization, scope="organization"
+            )
+        for field in ("action", "object_type"):
+            value = request.query_params.get(field)
+            if value:
+                logs = logs.filter(**{field: value})
+        actor = request.query_params.get("actor")
+        if actor:
+            if actor.isdigit():
+                logs = logs.filter(actor_id=int(actor))
+            else:
+                logs = logs.filter(Q(actor__username__icontains=actor) | Q(actor__display_name__icontains=actor))
+        if request.query_params.get("success") in {"true", "false", "1", "0"}:
+            logs = logs.filter(success=request.query_params.get("success") in {"true", "1"})
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            logs = logs.filter(created_at__date__gte=date_from)
+        if date_to:
+            logs = logs.filter(created_at__date__lte=date_to)
+        try:
+            page = max(int(request.query_params.get("page", "1")), 1)
+            page_size = min(max(int(request.query_params.get("page_size", "20")), 1), 100)
+        except ValueError:
+            return Response({"detail": "page 和 page_size 必须是数字"}, status=status.HTTP_400_BAD_REQUEST)
+        logs = logs.order_by("-created_at")
+        total = logs.count()
+        start = (page - 1) * page_size
+        logs = logs[start : start + page_size]
         return Response(
-            [
+            {
+                "items": [
                 {
                     "id": item.id,
                     "actor": item.actor.display_name or item.actor.email if item.actor else "系统",
@@ -478,5 +727,7 @@ class AuditLogListView(APIView):
                     "created_at": item.created_at,
                 }
                 for item in logs
-            ]
+                ],
+                "pagination": {"page": page, "page_size": page_size, "total": total},
+            }
         )

@@ -22,6 +22,7 @@ interface Feature {
   name: string;
   description: string;
   status: string;
+  current_version: number;
   manifest: {
     fields: FeatureField[];
     list?: { columns?: string[]; search_fields?: string[] };
@@ -29,6 +30,17 @@ interface Feature {
     detail?: { fields?: string[] };
     actions?: { create?: boolean; read?: boolean; update?: boolean; delete?: boolean };
   };
+}
+
+interface FeatureVersion {
+  id: number;
+  version: number;
+  name: string;
+  description: string;
+  manifest: Feature["manifest"];
+  created_by: number | null;
+  created_at: string;
+  note: string;
 }
 
 interface RecordItem {
@@ -59,7 +71,23 @@ const saving = ref(false);
 const editingId = ref<string | null>(null);
 const detailDialog = ref(false);
 const recordDetail = ref<RecordItem | null>(null);
+const versions = ref<FeatureVersion[]>([]);
+const versionDialog = ref(false);
+const selectedVersion = ref<FeatureVersion | null>(null);
 const formData = reactive<Record<string, unknown>>({});
+
+const versionDiff = computed(() => {
+  if (!feature.value || !selectedVersion.value) return [];
+  const current = new Map(feature.value.manifest.fields.map((field) => [field.key, field]));
+  const previous = new Map(selectedVersion.value.manifest.fields.map((field) => [field.key, field]));
+  const keys = [...new Set([...current.keys(), ...previous.keys()])];
+  return keys.map((key) => ({
+    key,
+    before: previous.get(key)?.label ?? "已移除",
+    after: current.get(key)?.label ?? "已移除",
+    changed: JSON.stringify(previous.get(key)) !== JSON.stringify(current.get(key)),
+  })).filter((item) => item.changed);
+});
 
 const columns = computed(() => {
   if (!feature.value) return [];
@@ -96,7 +124,11 @@ const sortOptions = computed(() => [
 ]);
 
 function featureUrl() {
-  return `/features/${String(route.params.featureId)}/records/`;
+  return `${featureBaseUrl()}records/`;
+}
+
+function featureBaseUrl() {
+  return `/features/${String(route.params.featureId)}/`;
 }
 
 async function load() {
@@ -108,10 +140,27 @@ async function load() {
     feature.value = result.feature;
     records.value = result.items;
     total.value = result.pagination.total;
+    versions.value = await api<FeatureVersion[]>(`${featureBaseUrl()}versions/`).catch(() => []);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "无法加载功能数据");
   } finally {
     loading.value = false;
+  }
+}
+
+async function openVersion(version: FeatureVersion) {
+  selectedVersion.value = await api<FeatureVersion>(`${featureBaseUrl()}versions/${version.version}/`);
+  versionDialog.value = true;
+}
+
+async function rollback(version: FeatureVersion) {
+  try {
+    await ElMessageBox.confirm(`确定回滚到版本 ${version.version}？当前定义会生成新的版本快照。`, "回滚功能", { type: "warning" });
+    await api(`${featureBaseUrl()}rollback/`, { method: "POST", body: { version: version.version, confirm: true } });
+    ElMessage.success("功能已回滚并重新发布");
+    await load();
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error instanceof Error ? error.message : "回滚失败");
   }
 }
 
@@ -195,9 +244,22 @@ onMounted(load);
     </div>
     <div class="page-actions">
       <el-button :icon="Refresh" circle title="刷新" aria-label="刷新" @click="load" />
+      <el-button v-if="versions.length" :icon="ViewIcon" @click="openVersion(versions[0])">版本 {{ feature?.current_version ?? 0 }}</el-button>
       <el-button v-if="feature?.manifest.actions?.create !== false" type="primary" :icon="Plus" @click="openCreate">新增数据</el-button>
     </div>
   </div>
+
+  <section v-if="versions.length" class="surface-section feature-version-section">
+    <div class="section-heading"><div><h2>版本历史</h2><p>当前版本 {{ feature?.current_version ?? 0 }}，历史快照不可变。</p></div></div>
+    <el-table :data="versions" size="small">
+      <el-table-column prop="version" label="版本" width="90" />
+      <el-table-column prop="name" label="名称" />
+      <el-table-column prop="created_at" label="发布时间" width="190" />
+      <el-table-column label="操作" width="180">
+        <template #default="{ row }"><el-button link @click="openVersion(row)">查看 diff</el-button><el-button v-if="row.version !== feature?.current_version" link type="warning" @click="rollback(row)">回滚</el-button></template>
+      </el-table-column>
+    </el-table>
+  </section>
 
   <section class="surface-section" v-loading="loading">
     <div class="section-heading feature-toolbar">
@@ -250,6 +312,15 @@ onMounted(load);
         <strong>{{ recordDetail.updated_at }}</strong>
       </div>
     </div>
+  </el-dialog>
+
+  <el-dialog v-model="versionDialog" :title="`版本 ${selectedVersion?.version ?? ''}`" width="620px">
+    <el-table :data="versionDiff" size="small" empty-text="与当前版本没有字段变化">
+      <el-table-column prop="key" label="字段" width="160" />
+      <el-table-column prop="before" label="历史版本" />
+      <el-table-column prop="after" label="当前版本" />
+    </el-table>
+    <p v-if="selectedVersion?.note" class="form-hint">{{ selectedVersion.note }}</p>
   </el-dialog>
 
   <el-dialog v-model="dialog" :title="editingId ? '编辑数据' : '新增数据'" width="560px">

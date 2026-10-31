@@ -60,3 +60,16 @@ class FeaturePlanningApiTest(TestCase):
         response = self.client.post(f"/api/features/{feature_id}/publish/", {}, content_type="application/json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Feature.objects.get(pk=feature_id).status, "published")
+        self.assertEqual(
+            self.client.post(f"/api/ai/feature-proposals/{proposal_id}/confirm/", {}, content_type="application/json").status_code,
+            400,
+        )
+
+    @patch("ai.views.get_provider", return_value=FakeProvider())
+    def test_reject_is_one_time_operation(self, provider):
+        response = self.client.post(
+            "/api/ai/feature-plan/", {"requirement": "创建一个客户管理"}, content_type="application/json"
+        )
+        proposal_id = response.json()["id"]
+        self.assertEqual(self.client.post(f"/api/ai/feature-proposals/{proposal_id}/reject/", {}).status_code, 200)
+        self.assertEqual(self.client.post(f"/api/ai/feature-proposals/{proposal_id}/reject/", {}).status_code, 400)

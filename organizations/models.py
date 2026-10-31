@@ -74,11 +74,26 @@ class RolePermission(models.Model):
 
 
 class Membership(models.Model):
+    STATUS_CHOICES = [
+        ("invited", "Invited"),
+        ("active", "Active"),
+        ("disabled", "Disabled"),
+    ]
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships")
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="memberships")
     is_owner = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
     is_active = models.BooleanField(default=True)
+    invited_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sent_membership_invitations",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -89,7 +104,14 @@ class Membership(models.Model):
 
 
 class AuditLog(models.Model):
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="audit_logs")
+    SCOPE_CHOICES = [("organization", "Organization"), ("system", "System")]
+    organization = models.ForeignKey(
+        Organization,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+    )
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -102,8 +124,40 @@ class AuditLog(models.Model):
     object_id = models.CharField(max_length=120, blank=True)
     metadata = models.JSONField(default=dict)
     success = models.BooleanField(default=True)
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default="organization")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["organization", "-created_at"])]
+        indexes = [
+            models.Index(fields=["organization", "-created_at"]),
+            models.Index(fields=["scope", "-created_at"]),
+        ]
+
+
+class MemberInvitation(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("revoked", "Revoked"),
+        ("expired", "Expired"),
+    ]
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="member_invitations")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="member_invitations")
+    role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="member_invitations")
+    token = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_member_invitations",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["organization", "status", "expires_at"])]

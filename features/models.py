@@ -19,6 +19,7 @@ class Feature(models.Model):
     description = models.CharField(max_length=500, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     manifest = models.JSONField(default=dict)
+    current_version = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_features"
     )
@@ -52,3 +53,25 @@ class FeatureRecord(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
+
+
+class FeatureVersion(models.Model):
+    feature = models.ForeignKey(Feature, on_delete=models.CASCADE, related_name="versions")
+    version = models.PositiveIntegerField()
+    name = models.CharField(max_length=160)
+    description = models.CharField(max_length=500, blank=True)
+    manifest = models.JSONField(default=dict)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_feature_versions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [
+            models.UniqueConstraint(fields=["feature", "version"], name="unique_feature_version")
+        ]

@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from organizations.services import get_active_membership, user_has_permission, write_audit
 
-from .models import Feature, FeatureRecord
+from .models import Feature, FeatureRecord, FeatureVersion
 from .services import (
     FEATURE_KEY_RE,
     feature_action_enabled,
@@ -23,6 +23,7 @@ def serialize_feature(feature, *, include_manifest=True):
         "name": feature.name,
         "description": feature.description,
         "status": feature.status,
+        "current_version": feature.current_version,
         "updated_at": feature.updated_at,
     }
     if include_manifest:
@@ -30,14 +31,35 @@ def serialize_feature(feature, *, include_manifest=True):
     return payload
 
 
-def serialize_record(record):
+def serialize_record(record, feature=None):
+    data = record.data
+    if feature is not None:
+        field_keys = {
+            field.get("key")
+            for field in feature.manifest.get("fields", [])
+            if isinstance(field, dict) and field.get("key")
+        }
+        data = {key: value for key, value in data.items() if key in field_keys}
     return {
         "id": str(record.pk),
-        "data": record.data,
+        "data": data,
         "created_by": record.created_by_id,
         "updated_by": record.updated_by_id,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
+    }
+
+
+def serialize_version(version):
+    return {
+        "id": version.id,
+        "version": version.version,
+        "name": version.name,
+        "description": version.description,
+        "manifest": version.manifest,
+        "created_by": version.created_by_id,
+        "created_at": version.created_at,
+        "note": version.note,
     }
 
 
@@ -88,7 +110,7 @@ class FeatureListView(APIView):
         name = str(request.data.get("name", "")).strip()
         manifest = request.data.get("manifest", {})
         errors = validate_manifest(manifest)
-        if not key or not name or not FEATURE_KEY_RE.fullmatch(key) or errors:
+        if not key or not name or len(name) > 160 or not FEATURE_KEY_RE.fullmatch(key) or errors:
             return Response({"detail": errors or ["功能参数不完整"]}, status=status.HTTP_400_BAD_REQUEST)
         if Feature.objects.filter(organization=membership.organization, key=key).exists():
             return Response({"detail": "功能编码已存在"}, status=status.HTTP_400_BAD_REQUEST)
@@ -128,7 +150,10 @@ class FeatureDetailView(APIView):
             return Response({"detail": "没有管理功能的权限"}, status=status.HTTP_403_FORBIDDEN)
         feature = scoped_feature(request, feature_id)
         if "name" in request.data:
-            feature.name = str(request.data["name"]).strip()
+            name = str(request.data["name"]).strip()
+            if not name or len(name) > 160:
+                return Response({"detail": "功能名称不能为空且不能超过 160 个字符"}, status=status.HTTP_400_BAD_REQUEST)
+            feature.name = name
         if "description" in request.data:
             feature.description = str(request.data["description"]).strip()[:500]
         if "manifest" in request.data:
@@ -160,14 +185,27 @@ class FeatureStateView(APIView):
         if self.state == "published" and errors:
             return Response({"detail": errors}, status=status.HTTP_400_BAD_REQUEST)
         feature.status = self.state
-        feature.save(update_fields=["status", "updated_at"])
+        if self.state == "published":
+            next_version = feature.current_version + 1
+            FeatureVersion.objects.create(
+                feature=feature,
+                version=next_version,
+                name=feature.name,
+                description=feature.description,
+                manifest=feature.manifest,
+                created_by=request.user,
+            )
+            feature.current_version = next_version
+            feature.save(update_fields=["status", "current_version", "updated_at"])
+        else:
+            feature.save(update_fields=["status", "updated_at"])
         write_audit(
             organization=feature.organization,
             actor=request.user,
             action=f"feature.{self.state}",
             object_type="feature",
             object_id=feature.pk,
-            metadata={},
+            metadata={"version": feature.current_version} if self.state == "published" else {},
         )
         return Response(serialize_feature(feature))
 
@@ -178,6 +216,76 @@ class FeaturePublishView(FeatureStateView):
 
 class FeatureDisableView(FeatureStateView):
     state = "disabled"
+
+
+class FeatureVersionListView(APIView):
+    def get(self, request, feature_id):
+        feature = scoped_feature(request, feature_id)
+        if feature.status != "published" and not user_has_permission(request, "feature.manage"):
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("功能尚未发布")
+        if not user_has_permission(request, "feature.read"):
+            return Response({"detail": "没有查看功能的权限"}, status=status.HTTP_403_FORBIDDEN)
+        versions = feature.versions.select_related("created_by").all()
+        return Response([serialize_version(item) for item in versions])
+
+
+class FeatureVersionDetailView(APIView):
+    def get(self, request, feature_id, version):
+        feature = scoped_feature(request, feature_id)
+        if feature.status != "published" and not user_has_permission(request, "feature.manage"):
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("功能尚未发布")
+        if not user_has_permission(request, "feature.read"):
+            return Response({"detail": "没有查看功能的权限"}, status=status.HTTP_403_FORBIDDEN)
+        item = get_object_or_404(FeatureVersion, feature=feature, version=version)
+        return Response(serialize_version(item))
+
+
+class FeatureRollbackView(APIView):
+    @transaction.atomic
+    def post(self, request, feature_id):
+        if not user_has_permission(request, "feature.manage"):
+            return Response({"detail": "没有管理功能的权限"}, status=status.HTTP_403_FORBIDDEN)
+        if request.data.get("confirm") is not True:
+            return Response({"detail": "请确认回滚操作"}, status=status.HTTP_400_BAD_REQUEST)
+        feature = scoped_feature(request, feature_id)
+        try:
+            version_number = int(request.data.get("version"))
+        except (TypeError, ValueError):
+            return Response({"detail": "version 必须是数字"}, status=status.HTTP_400_BAD_REQUEST)
+        source = get_object_or_404(FeatureVersion, feature=feature, version=version_number)
+        errors = validate_manifest(source.manifest)
+        if errors:
+            return Response({"detail": errors}, status=status.HTTP_400_BAD_REQUEST)
+        from_version = feature.current_version
+        feature.name = source.name
+        feature.description = source.description
+        feature.manifest = source.manifest
+        feature.status = "published"
+        next_version = feature.current_version + 1
+        FeatureVersion.objects.create(
+            feature=feature,
+            version=next_version,
+            name=feature.name,
+            description=feature.description,
+            manifest=feature.manifest,
+            created_by=request.user,
+            note=f"rollback from {source.version}",
+        )
+        feature.current_version = next_version
+        feature.save(update_fields=["name", "description", "manifest", "status", "current_version", "updated_at"])
+        write_audit(
+            organization=feature.organization,
+            actor=request.user,
+            action="feature.rolled_back",
+            object_type="feature",
+            object_id=feature.pk,
+            metadata={"from": from_version, "to": next_version, "source_version": source.version},
+        )
+        return Response(serialize_feature(feature))
 
 
 class FeatureRecordListView(APIView):
@@ -248,7 +356,7 @@ class FeatureRecordListView(APIView):
         total = len(records)
         return Response(
             {
-                "items": [serialize_record(record) for record in records[start : start + page_size]],
+                "items": [serialize_record(record, feature) for record in records[start : start + page_size]],
                 "pagination": {"page": page, "page_size": page_size, "total": total},
                 "feature": serialize_feature(feature),
             }
@@ -279,7 +387,7 @@ class FeatureRecordListView(APIView):
             object_id=record.pk,
             metadata={"feature": feature.key},
         )
-        return Response(serialize_record(record), status=status.HTTP_201_CREATED)
+        return Response(serialize_record(record, feature), status=status.HTTP_201_CREATED)
 
 
 class FeatureRecordDetailView(APIView):
@@ -293,7 +401,7 @@ class FeatureRecordDetailView(APIView):
             return Response({"detail": "该功能不允许查看数据"}, status=status.HTTP_403_FORBIDDEN)
         if not user_has_permission(request, feature_permission_code(feature, "read")):
             return Response({"detail": "没有查看功能数据的权限"}, status=status.HTTP_403_FORBIDDEN)
-        return Response(serialize_record(record))
+        return Response(serialize_record(record, feature))
 
     @transaction.atomic
     def patch(self, request, feature_id, record_id):
@@ -321,7 +429,7 @@ class FeatureRecordDetailView(APIView):
             object_id=record.pk,
             metadata={"feature": feature.key},
         )
-        return Response(serialize_record(record))
+        return Response(serialize_record(record, feature))
 
     @transaction.atomic
     def delete(self, request, feature_id, record_id):

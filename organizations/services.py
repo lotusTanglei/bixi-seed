@@ -1,9 +1,13 @@
+import hashlib
+import secrets
 import uuid
+from datetime import timedelta
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
-from .models import AuditLog, Membership, Organization, Permission, Role
+from .models import AuditLog, MemberInvitation, Membership, Organization, Permission, Role
 
 
 ACTIVE_ORGANIZATION_SESSION_KEY = "bixi_active_organization_id"
@@ -53,7 +57,7 @@ def get_user_memberships(user):
     if not user.is_authenticated:
         return Membership.objects.none()
     return Membership.objects.select_related("organization", "organization__parent", "role").filter(
-        user=user, is_active=True
+        user=user, status="active", is_active=True
     )
 
 
@@ -137,7 +141,19 @@ def unique_slug(name):
     return value
 
 
-def write_audit(*, organization, actor, action, object_type, object_id="", metadata=None, success=True):
+def write_audit(
+    *,
+    organization=None,
+    actor,
+    action,
+    object_type,
+    object_id="",
+    metadata=None,
+    success=True,
+    scope=None,
+):
+    if scope is None:
+        scope = "organization" if organization is not None else "system"
     return AuditLog.objects.create(
         organization=organization,
         actor=actor,
@@ -146,7 +162,56 @@ def write_audit(*, organization, actor, action, object_type, object_id="", metad
         object_id=str(object_id),
         metadata=metadata or {},
         success=success,
+        scope=scope,
     )
+
+
+def sync_membership_status(membership, status, *, save=True):
+    if status not in {"invited", "active", "disabled"}:
+        raise ValueError("无效的成员状态")
+    membership.status = status
+    membership.is_active = status == "active"
+    if save:
+        membership.save(update_fields=["status", "is_active"])
+    return membership
+
+
+def create_invitation(*, organization, user, role, created_by, expires_in_days=7):
+    now = timezone.now()
+    existing = MemberInvitation.objects.filter(
+        organization=organization,
+        user=user,
+        status="pending",
+    ).first()
+    if existing:
+        existing.status = "revoked"
+        existing.save(update_fields=["status"])
+    raw_token = secrets.token_urlsafe(32)
+    token_digest = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    invitation = MemberInvitation.objects.create(
+        organization=organization,
+        user=user,
+        role=role,
+        token=token_digest,
+        expires_at=now + timedelta(days=expires_in_days),
+        created_by=created_by,
+    )
+    return invitation, raw_token
+
+
+def find_invitation(raw_token, *, for_update=False):
+    if not raw_token:
+        return None
+    digest = hashlib.sha256(str(raw_token).encode("utf-8")).hexdigest()
+    queryset = MemberInvitation.objects.select_related("organization", "user", "role")
+    if for_update:
+        queryset = queryset.select_for_update()
+    invitation = queryset.filter(token=digest).first()
+    if invitation and invitation.status == "pending" and invitation.expires_at <= timezone.now():
+        invitation.status = "expired"
+        invitation.save(update_fields=["status"])
+        return None
+    return invitation
 
 
 @transaction.atomic
