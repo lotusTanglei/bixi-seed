@@ -51,34 +51,35 @@ jobs:
       - name: setup
         shell: pwsh
         run: |
-          try {
-            & ./scripts/setup.ps1
-          } catch {
-            Write-Host "::error::setup failed: $($_.Exception.Message)"
-            Write-Host $_.ScriptStackTrace
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::setup failed with exit $LASTEXITCODE"; exit 1 }
+      - name: lifecycle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          function Invoke-Script([string]$name, [string]$file) {
+            Write-Host "=== $name ==="
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $file
+            return $LASTEXITCODE
+          }
+          $code = Invoke-Script 'start' 'scripts\start.ps1'
+          if ($code -ne 0) { Write-Host "::error::start failed with exit $code"; exit 1 }
+          $code = Invoke-Script 'status' 'scripts\status.ps1'
+          if ($code -ne 0) {
+            $diag = @()
+            $diag += "pidfile_exists=" + (Test-Path 'data\bixi-seed.pid')
+            if (Test-Path 'data\bixi-seed.pid') { $diag += "pid=" + ((Get-Content 'data\bixi-seed.pid' -Raw).Trim()) }
+            $diag += "python_procs=" + ((Get-Process python* -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) -join ',')
+            try { $r = Invoke-WebRequest 'http://127.0.0.1:8000/api/health/' -UseBasicParsing -TimeoutSec 5; $diag += "health=" + $r.StatusCode } catch { $diag += "health_err=" + $_.Exception.Message }
+            Get-ChildItem 'data\logs\*.log' -ErrorAction SilentlyContinue | ForEach-Object { $diag += ($_.Name + ': ' + ((Get-Content $_.FullName -Tail 15) -join ' / ')) }
+            Write-Host "::error::$($diag -join ' || ')"
             exit 1
           }
-      - name: start
-        shell: pwsh
-        run: |
-          try { & ./scripts/start.ps1 } catch { Write-Host "::error::start failed: $($_.Exception.Message)"; Write-Host $_.ScriptStackTrace; exit 1 }
-      - name: status
-        shell: pwsh
-        run: |
-          try { & ./scripts/status.ps1 } catch { Write-Host "::error::status failed: $($_.Exception.Message)"; exit 1 }
-      - name: health
-        shell: pwsh
-        run: |
-          $response = Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health/ -TimeoutSec 10
-          $response | ConvertTo-Json -Compress
-      - name: backup
-        shell: pwsh
-        run: |
-          try { & ./scripts/backup.ps1 } catch { Write-Host "::error::backup failed: $($_.Exception.Message)"; exit 1 }
-      - name: stop
-        shell: pwsh
-        run: |
-          try { & ./scripts/stop.ps1 } catch { Write-Host "::error::stop failed: $($_.Exception.Message)"; exit 1 }
+          try { $r = Invoke-WebRequest 'http://127.0.0.1:8000/api/health/' -UseBasicParsing -TimeoutSec 10; Write-Host "health=" + $r.StatusCode } catch { Write-Host "::error::health failed: $($_.Exception.Message)"; exit 1 }
+          $code = Invoke-Script 'backup' 'scripts\backup.ps1'
+          if ($code -ne 0) { Write-Host "::error::backup failed with exit $code"; exit 1 }
+          $code = Invoke-Script 'stop' 'scripts\stop.ps1'
+          if ($code -ne 0) { Write-Host "::error::stop failed with exit $code"; exit 1 }
       - name: collect logs
         if: always()
         shell: pwsh
