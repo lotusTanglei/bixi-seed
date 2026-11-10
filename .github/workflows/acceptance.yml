@@ -51,19 +51,28 @@ jobs:
       - name: setup
         shell: pwsh
         run: |
-          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1
-          if ($LASTEXITCODE -ne 0) { Write-Host "::error::setup failed with exit $LASTEXITCODE"; exit 1 }
+          try {
+            & ./scripts/setup.ps1 2>&1 | ForEach-Object { Write-Host $_ }
+          } catch {
+            Write-Host "::error::setup threw: $($_.Exception.Message)"
+            Write-Host $_.ScriptStackTrace
+            exit 1
+          }
       - name: lifecycle
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
           function Invoke-Script([string]$name, [string]$file) {
             Write-Host "=== $name ==="
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $file
+            & pwsh -NoProfile -File $file 2>&1 | ForEach-Object { Write-Host $_ }
             return $LASTEXITCODE
           }
           $code = Invoke-Script 'start' 'scripts\start.ps1'
-          if ($code -ne 0) { Write-Host "::error::start failed with exit $code"; exit 1 }
+          if ($code -ne 0) {
+            Get-ChildItem 'data\logs\*.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ($_.Name + ': ' + ((Get-Content $_.FullName -Tail 15) -join ' / ')) }
+            Write-Host "::error::start failed with exit $code"
+            exit 1
+          }
           $code = Invoke-Script 'status' 'scripts\status.ps1'
           if ($code -ne 0) {
             $diag = @()
