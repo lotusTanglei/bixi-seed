@@ -1,0 +1,68 @@
+name: cross-platform acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: setup
+        run: ./scripts/setup.sh
+      - name: start
+        run: ./scripts/start.sh
+      - name: status
+        run: ./scripts/status.sh
+      - name: health
+        run: curl -fsS http://127.0.0.1:8000/api/health/
+      - name: backup
+        run: ./scripts/backup.sh
+      - name: stop
+        run: ./scripts/stop.sh
+      - name: collect logs
+        if: always()
+        run: |
+          echo "=== server.out.log ==="; tail -n 80 logs/server.out.log 2>/dev/null || true
+          echo "=== server.err.log ==="; tail -n 80 logs/server.err.log 2>/dev/null || true
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: setup
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 < nul
+      - name: start
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start.ps1 < nul
+      - name: status
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\status.ps1 < nul
+      - name: health
+        run: curl.exe -fsS http://127.0.0.1:8000/api/health/
+      - name: backup
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup.ps1 < nul
+      - name: stop
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop.ps1 < nul
+      - name: collect logs
+        if: always()
+        run: |
+          type logs\server.out.log 2>nul
+          type logs\server.err.log 2>nul
