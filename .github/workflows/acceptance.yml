@@ -32,15 +32,14 @@ jobs:
       - name: collect logs
         if: always()
         run: |
-          echo "=== server.out.log ==="; tail -n 80 logs/server.out.log 2>/dev/null || true
-          echo "=== server.err.log ==="; tail -n 80 logs/server.err.log 2>/dev/null || true
+          echo "=== server.out.log ==="; tail -n 80 data/logs/server.out.log 2>/dev/null || true
+          echo "=== server.err.log ==="; tail -n 80 data/logs/server.err.log 2>/dev/null || true
 
   windows:
     runs-on: windows-2025
     timeout-minutes: 20
-    defaults:
-      run:
-        shell: cmd
+    env:
+      BIXI_SKIP_ADMIN_PROMPT: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,19 +49,41 @@ jobs:
         with:
           node-version: '22'
       - name: setup
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 < nul
+        shell: pwsh
+        run: |
+          try {
+            & ./scripts/setup.ps1
+          } catch {
+            Write-Host "::error::setup failed: $($_.Exception.Message)"
+            Write-Host $_.ScriptStackTrace
+            exit 1
+          }
       - name: start
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start.ps1 < nul
+        shell: pwsh
+        run: |
+          try { & ./scripts/start.ps1 } catch { Write-Host "::error::start failed: $($_.Exception.Message)"; Write-Host $_.ScriptStackTrace; exit 1 }
       - name: status
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\status.ps1 < nul
+        shell: pwsh
+        run: |
+          try { & ./scripts/status.ps1 } catch { Write-Host "::error::status failed: $($_.Exception.Message)"; exit 1 }
       - name: health
-        run: curl.exe -fsS http://127.0.0.1:8000/api/health/
+        shell: pwsh
+        run: |
+          $response = Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health/ -TimeoutSec 10
+          $response | ConvertTo-Json -Compress
       - name: backup
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup.ps1 < nul
+        shell: pwsh
+        run: |
+          try { & ./scripts/backup.ps1 } catch { Write-Host "::error::backup failed: $($_.Exception.Message)"; exit 1 }
       - name: stop
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop.ps1 < nul
+        shell: pwsh
+        run: |
+          try { & ./scripts/stop.ps1 } catch { Write-Host "::error::stop failed: $($_.Exception.Message)"; exit 1 }
       - name: collect logs
         if: always()
+        shell: pwsh
         run: |
-          type logs\server.out.log 2>nul
-          type logs\server.err.log 2>nul
+          Get-ChildItem data\logs\*.log -ErrorAction SilentlyContinue | ForEach-Object {
+            "=== $($_.Name) ==="
+            Get-Content $_.FullName -Tail 80
+          }

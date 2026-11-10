@@ -48,6 +48,9 @@ if ($LASTEXITCODE -ne 0) { throw "数据库迁移失败。" }
 & $VenvPython manage.py collectstatic --noinput
 if ($LASTEXITCODE -ne 0) { throw "静态文件收集失败。" }
 Write-Host "基础环境已经准备完成。"
+if ($env:BIXI_SKIP_ADMIN_PROMPT) {
+    Write-Host "BIXI_SKIP_ADMIN_PROMPT 已设置，跳过管理员创建；之后可运行 bootstrap_admin。"
+} else {
     $adminUsername = Read-Host "管理员账号（直接回车跳过）"
     if ($adminUsername) {
         $securePassword = Read-Host "管理员密码（至少 10 个字符）" -AsSecureString
@@ -65,5 +68,6 @@ Write-Host "基础环境已经准备完成。"
         Remove-Item Env:BIXI_ADMIN_PASSWORD -ErrorAction SilentlyContinue
         Remove-Item Env:BIXI_ADMIN_CONTACT -ErrorAction SilentlyContinue
     }
+}
 }
 Write-Host "可以运行 start.bat 启动服务。"
