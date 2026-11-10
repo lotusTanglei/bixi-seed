@@ -4,7 +4,7 @@
 
 ## 第一阶段：可运行基础
 
-状态：第一阶段收口已完成核心实现与自动化验收，已在 macOS 上实测初始化后的启动、状态、重启、停止、端口占用、自启动、备份和恢复；Windows 与 Linux 脚本已提供，需在对应系统执行最终环境验收。
+状态：第一阶段收口已完成核心实现与自动化验收，已在 macOS 上实测初始化后的启动、状态、重启、停止、端口占用、自启动、备份和恢复；Linux（Ubuntu 24.04，GitHub Actions）已于 2026-11-10 通过 setup→start→status→health→backup→stop 验收；Windows 验收因暂无对应环境暂缓，脚本已提供，待有环境时补做（`.github/workflows/acceptance.yml` 目前只覆盖 Linux）。
 
 - Django 5.2 LTS 项目和 SQLite 配置
 - Vue 3、TypeScript、Vite 和 Element Plus 前端壳

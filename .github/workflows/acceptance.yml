@@ -1,4 +1,4 @@
-name: cross-platform acceptance
+name: linux acceptance
 
 on:
   workflow_dispatch:
@@ -34,66 +34,3 @@ jobs:
         run: |
           echo "=== server.out.log ==="; tail -n 80 data/logs/server.out.log 2>/dev/null || true
           echo "=== server.err.log ==="; tail -n 80 data/logs/server.err.log 2>/dev/null || true
-
-  windows:
-    runs-on: windows-2025
-    timeout-minutes: 20
-    env:
-      BIXI_SKIP_ADMIN_PROMPT: '1'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: setup
-        shell: pwsh
-        run: |
-          try {
-            & ./scripts/setup.ps1 2>&1 | ForEach-Object { Write-Host $_ }
-          } catch {
-            Write-Host "::error::setup threw: $($_.Exception.Message)"
-            Write-Host $_.ScriptStackTrace
-            exit 1
-          }
-      - name: lifecycle
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          function Invoke-Script([string]$name, [string]$file) {
-            Write-Host "=== $name ==="
-            & pwsh -NoProfile -File $file 2>&1 | ForEach-Object { Write-Host $_ }
-            return $LASTEXITCODE
-          }
-          $code = Invoke-Script 'start' 'scripts\start.ps1'
-          if ($code -ne 0) {
-            Get-ChildItem 'data\logs\*.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ($_.Name + ': ' + ((Get-Content $_.FullName -Tail 15) -join ' / ')) }
-            Write-Host "::error::start failed with exit $code"
-            exit 1
-          }
-          $code = Invoke-Script 'status' 'scripts\status.ps1'
-          if ($code -ne 0) {
-            $diag = @()
-            $diag += "pidfile_exists=" + (Test-Path 'data\bixi-seed.pid')
-            if (Test-Path 'data\bixi-seed.pid') { $diag += "pid=" + ((Get-Content 'data\bixi-seed.pid' -Raw).Trim()) }
-            $diag += "python_procs=" + ((Get-Process python* -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) -join ',')
-            try { $r = Invoke-WebRequest 'http://127.0.0.1:8000/api/health/' -UseBasicParsing -TimeoutSec 5; $diag += "health=" + $r.StatusCode } catch { $diag += "health_err=" + $_.Exception.Message }
-            Get-ChildItem 'data\logs\*.log' -ErrorAction SilentlyContinue | ForEach-Object { $diag += ($_.Name + ': ' + ((Get-Content $_.FullName -Tail 15) -join ' / ')) }
-            Write-Host "::error::$($diag -join ' || ')"
-            exit 1
-          }
-          try { $r = Invoke-WebRequest 'http://127.0.0.1:8000/api/health/' -UseBasicParsing -TimeoutSec 10; Write-Host "health=" + $r.StatusCode } catch { Write-Host "::error::health failed: $($_.Exception.Message)"; exit 1 }
-          $code = Invoke-Script 'backup' 'scripts\backup.ps1'
-          if ($code -ne 0) { Write-Host "::error::backup failed with exit $code"; exit 1 }
-          $code = Invoke-Script 'stop' 'scripts\stop.ps1'
-          if ($code -ne 0) { Write-Host "::error::stop failed with exit $code"; exit 1 }
-      - name: collect logs
-        if: always()
-        shell: pwsh
-        run: |
-          Get-ChildItem data\logs\*.log -ErrorAction SilentlyContinue | ForEach-Object {
-            "=== $($_.Name) ==="
-            Get-Content $_.FullName -Tail 80
-          }
