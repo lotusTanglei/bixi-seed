@@ -64,7 +64,13 @@ def normalize_data_scope(value):
 
 def membership_data_scope(membership):
     scope, error = normalize_data_scope(getattr(membership.role, "data_scope", None))
-    return scope if error is None else {"mode": "all"}
+    return scope if error is None else {"mode": "own"}
+
+
+def can_assign_data_scope(membership, scope):
+    if membership.is_owner or membership.user.is_superuser:
+        return True
+    return membership_data_scope(membership)["mode"] == "all" or scope["mode"] == "own"
 
 
 def ensure_default_permissions():
@@ -122,7 +128,8 @@ def can_assign_role(membership, role):
         return True
     actor_permissions = set(get_membership_permissions(membership))
     role_permissions = set(role.permissions.values_list("code", flat=True))
-    return role_permissions.issubset(actor_permissions)
+    role_scope, error = normalize_data_scope(role.data_scope)
+    return error is None and role_permissions.issubset(actor_permissions) and can_assign_data_scope(membership, role_scope)
 
 
 def membership_has_permission(membership, permission_code):

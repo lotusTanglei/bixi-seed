@@ -73,3 +73,60 @@ class RoleExtensionsApiTest(TestCase):
         response = member_client.get(f"/api/features/{feature.pk}/records/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["data"]["name"] for item in response.json()["items"]], ["member"])
+
+    def test_own_scope_manager_cannot_expand_data_scope(self):
+        limited = Role.objects.create(
+            organization=self.organization, code="own-manager", name="个人管理员", data_scope={"mode": "own"}
+        )
+        limited.permissions.add(Permission.objects.get(code="role.manage"))
+        user = User.objects.create_user("own-manager", "test-password-123")
+        Membership.objects.create(organization=self.organization, user=user, role=limited)
+        broad = Role.objects.create(organization=self.organization, code="broad", name="全部数据")
+        broad.permissions.set(limited.permissions.all())
+        client = self.client.__class__()
+        client.force_login(user)
+        self.assertEqual(client.post("/api/organizations/roles/", {
+            "code": "escalate", "name": "越权", "permissions": ["role.manage"], "data_scope": {"mode": "all"}
+        }, content_type="application/json").status_code, 403)
+        self.assertEqual(client.patch(f"/api/organizations/roles/{limited.pk}/", {
+            "data_scope": {"mode": "all"}
+        }, content_type="application/json").status_code, 403)
+        self.assertEqual(client.post(f"/api/organizations/roles/{broad.pk}/copy/", {}, content_type="application/json").status_code, 403)
+        self.assertEqual(client.post("/api/organizations/members/batch-role/", {
+            "user_ids": [user.pk], "role_id": broad.pk
+        }, content_type="application/json").status_code, 403)
+        limited.refresh_from_db()
+        self.assertEqual(limited.data_scope, {"mode": "own"})
+
+    def test_cross_organization_copy_and_batch_assignment_are_rejected_atomically(self):
+        other_user = User.objects.create_user("other-org-owner", "test-password-123")
+        other = create_organization(user=other_user, name="其他组织")
+        foreign_role = Role.objects.get(organization=other, code="member")
+        role = Role.objects.get(organization=self.organization, code="member")
+        user = User.objects.create_user("batch-local", "test-password-123")
+        member = Membership.objects.create(organization=self.organization, user=user, role=role)
+        self.assertEqual(self.client.post(f"/api/organizations/roles/{foreign_role.pk}/copy/", {}, content_type="application/json").status_code, 404)
+        response = self.client.post("/api/organizations/members/batch-role/", {
+            "user_ids": [user.pk, other_user.pk], "role_id": Role.objects.get(organization=self.organization, code="admin").pk
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 404)
+        member.refresh_from_db()
+        self.assertEqual(member.role_id, role.pk)
+        self.assertFalse(self.organization.audit_logs.filter(action="member.roles.batch_updated").exists())
+
+    def test_own_scope_blocks_record_detail_update_and_delete(self):
+        role = Role.objects.create(organization=self.organization, code="own-editor", name="个人编辑", data_scope={"mode": "own"})
+        role.permissions.add(*Permission.objects.filter(code__in=["feature.read", "feature.update", "feature.delete"]))
+        user = User.objects.create_user("own-editor", "test-password-123")
+        Membership.objects.create(organization=self.organization, user=user, role=role)
+        feature = Feature.objects.create(organization=self.organization, key="own-edit", name="边界", status="published",
+            manifest={"version": 1, "fields": [{"key": "name", "label": "名称", "type": "text"}]}, created_by=self.owner)
+        record = FeatureRecord.objects.create(feature=feature, data={"name": "保留"}, created_by=self.owner, updated_by=self.owner)
+        client = self.client.__class__()
+        client.force_login(user)
+        url = f"/api/features/{feature.pk}/records/{record.pk}/"
+        self.assertEqual(client.get(url).status_code, 404)
+        self.assertEqual(client.patch(url, {"data": {"name": "越权"}}, content_type="application/json").status_code, 404)
+        self.assertEqual(client.delete(url).status_code, 404)
+        record.refresh_from_db()
+        self.assertEqual(record.data, {"name": "保留"})

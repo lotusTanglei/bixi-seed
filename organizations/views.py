@@ -13,6 +13,7 @@ from accounts.models import User
 from .models import AuditLog, MemberInvitation, Membership, Permission, Role, RolePermission
 from .services import (
     PERMISSION_METADATA,
+    can_assign_data_scope,
     can_assign_role,
     create_invitation,
     create_organization,
@@ -592,6 +593,8 @@ class RoleListView(APIView):
             return Response({"detail": "permissions 必须是字符串数组"}, status=status.HTTP_400_BAD_REQUEST)
         if data_scope_error:
             return Response({"detail": data_scope_error}, status=status.HTTP_400_BAD_REQUEST)
+        if not can_assign_data_scope(membership, data_scope):
+            return Response({"detail": "不能分配超出当前账号的数据范围"}, status=status.HTTP_403_FORBIDDEN)
         if not code.replace("-", "").replace("_", "").isalnum() or len(code) > 100:
             return Response({"detail": "角色编码格式不正确"}, status=status.HTTP_400_BAD_REQUEST)
         if Role.objects.filter(organization=membership.organization, code=code).exists():
@@ -640,6 +643,9 @@ class RoleDetailView(APIView):
             return Response({"detail": "角色不存在"}, status=status.HTTP_404_NOT_FOUND)
         if role.is_system:
             return Response({"detail": "系统角色不能编辑"}, status=status.HTTP_400_BAD_REQUEST)
+        existing_scope, scope_error = normalize_data_scope(role.data_scope)
+        if scope_error or not can_assign_data_scope(current, existing_scope):
+            return Response({"detail": "不能管理超出当前账号数据范围的角色"}, status=status.HTTP_403_FORBIDDEN)
         permissions = None
         data_scope = None
         if "permissions" in request.data:
@@ -656,6 +662,8 @@ class RoleDetailView(APIView):
             data_scope, data_scope_error = normalize_data_scope(request.data["data_scope"])
             if data_scope_error:
                 return Response({"detail": data_scope_error}, status=status.HTTP_400_BAD_REQUEST)
+            if not can_assign_data_scope(current, data_scope):
+                return Response({"detail": "不能分配超出当前账号的数据范围"}, status=status.HTTP_403_FORBIDDEN)
         if "name" in request.data:
             name = str(request.data["name"]).strip()
             if not name or len(name) > 120:
