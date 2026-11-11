@@ -1,0 +1,9 @@
+{
+  "scope": "only disposable owner fixture organization",
+  "removed_fixture_rows": {
+    "extensions.ExtensionDraft": 1,
+    "ai.ToolCallProposal": 1,
+    "features.Feature": 1,
+    "organizations.AuditLog": 20
+  }
+}

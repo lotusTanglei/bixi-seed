@@ -1,0 +1,4 @@
+COMMAND: .venv/bin/python manage.py restore_data --input /Users/dundundebaba/sync/code/open/bixi-seed/data/backups/db-20261111-163853.sqlite3
+BIXI_DATA_DIR: /Users/dundundebaba/sync/code/open/bixi-seed/data/backups/maintenance-20261111-local-upgrade/recovery-check
+EXIT_CODE: 0
+数据库恢复完成: /Users/dundundebaba/sync/code/open/bixi-seed/data/backups/maintenance-20261111-local-upgrade/recovery-check/db.sqlite3

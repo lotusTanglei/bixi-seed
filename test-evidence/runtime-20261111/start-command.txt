@@ -1,0 +1,8 @@
+COMMAND: ./start.sh
+EXIT_CODE: 0
+System check identified no issues (0 silenced).
+Operations to perform:
+  Apply all migrations: accounts, admin, ai, auth, contenttypes, core, extensions, features, organizations, sessions
+Running migrations:
+  No migrations to apply.
+Bixi Seed 已在后台启动，地址: http://127.0.0.1:8000

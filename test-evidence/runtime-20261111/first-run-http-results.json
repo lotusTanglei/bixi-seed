@@ -1,0 +1,346 @@
+{
+  "transport": "real loopback HTTP",
+  "model_mocked": false,
+  "passed": false,
+  "error_type": "AssertionError",
+  "error": "tool-propose-update: expected HTTP 201, got 400",
+  "running_status_exit": 0,
+  "stop_exit": 0,
+  "stopped_status_exit": 1,
+  "http_check_count": 37,
+  "events": [
+    {
+      "check": "health",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/health/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-index",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-static-asset",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/static/assets/index-DDEqsW5_.js",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-static-asset",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/static/assets/index-BC1dJ6i3.css",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "csrf",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/auth/csrf/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "login",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/auth/login/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "csrf",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/auth/csrf/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "login",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/auth/login/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "authenticated-me",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/auth/me/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-catalog-empty",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "extension-validate",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/validate/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-confirmation-required",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "extension-stale-hash-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "foreign-catalog-is-empty",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "foreign-extension-validate-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/validate/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-extension-enable-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/enable/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "extension-confirm-enable",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/enable/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-repeat-enable-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/1/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "extension-catalog-enabled",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "feature-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "feature-publish",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/e7c8d5b1-9c19-41ef-b425-57fb46e8cb57/publish/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-catalog",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/ai/tools/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "no-execution-before-confirm",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/e7c8d5b1-9c19-41ef-b425-57fb46e8cb57/records/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-confirmation-required",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/confirm/",
+      "expected": 400,
+      "actual": 400,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-detail-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/ai/tool-proposals/1/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-confirm-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/confirm/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-revoke-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/revoke/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "tool-confirm-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/confirm/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-repeat-confirm-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/confirm/",
+      "expected": 400,
+      "actual": 400,
+      "passed": true
+    },
+    {
+      "check": "tool-revoke-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/1/revoke/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-create-compensated",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/e7c8d5b1-9c19-41ef-b425-57fb46e8cb57/records/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "fixture-record-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/e7c8d5b1-9c19-41ef-b425-57fb46e8cb57/records/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-update",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 400,
+      "passed": false
+    },
+    {
+      "check": "fixture-logout",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/auth/logout/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "fixture-logout",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/auth/logout/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    }
+  ]
+}

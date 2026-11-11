@@ -1,0 +1,3 @@
+COMMAND: ./status.sh
+EXIT_CODE: 1
+进程状态: 已停止

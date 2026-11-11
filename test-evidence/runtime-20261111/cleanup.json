@@ -1,0 +1,38 @@
+{
+  "scope": "only this run disposable users/organizations/default permission seeds",
+  "organization_cascade_removed": {
+    "organizations.RolePermission": 54,
+    "features.FeatureRecord": 1,
+    "features.FeatureVersion": 1,
+    "organizations.AuditLog": 43,
+    "ai.ToolCallProposal": 4,
+    "extensions.ExtensionDraft": 1,
+    "organizations.Role": 6,
+    "features.Feature": 1,
+    "organizations.Organization": 2
+  },
+  "users_removed": {
+    "accounts.User": 2
+  },
+  "new_permission_seeds_removed": 12,
+  "ephemeral_credential_file_removed": true,
+  "post_cleanup_counts": {
+    "accounts_user": 0,
+    "organizations_organization": 0,
+    "organizations_membership": 0,
+    "organizations_role": 0,
+    "organizations_permission": 0,
+    "organizations_auditlog": 0,
+    "features_feature": 0,
+    "features_featurerecord": 0,
+    "ai_toolcallproposal": 0,
+    "ai_llmproviderconfig": 0,
+    "extensions_extensiondraft": 0,
+    "django_session": 0
+  },
+  "database_integrity": "ok",
+  "backup_sha_unchanged": true,
+  "private_archive_sha_unchanged": true,
+  "env_sha_unchanged": true,
+  "expected_instance_state": "stopped"
+}

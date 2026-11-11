@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-11 Asia/Shanghai",
+  "baseline": "485ef06",
+  "db_backup": "/Users/dundundebaba/sync/code/open/bixi-seed/data/backups/db-20261111-163853.sqlite3",
+  "db_backup_sha256": "bfc6ec5334a38d1ac0d9ab861686b2922b5fcc28a9dde56a801b2358a42cf034",
+  "db_backup_integrity": "ok",
+  "private_archive": "/Users/dundundebaba/sync/code/open/bixi-seed/data/backups/maintenance-20261111-local-upgrade/pre-upgrade-data-and-env.tar.gz",
+  "private_archive_sha256": "afce9b15611fba1971bf4f54b3164092649a11ea2190430ffb6dfd8af27d9cc0",
+  "env_backup_present": true,
+  "env_sha256": "faf932e86b88b7ca7055e5e2ca8c073b9287e2954c080b9e82a5bddc88436fbd",
+  "archive_mode": "0o600",
+  "private_directory_mode": "0o700",
+  "db_backup_mode": "0o600"
+}

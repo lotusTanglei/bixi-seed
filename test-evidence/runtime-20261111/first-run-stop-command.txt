@@ -1,0 +1,3 @@
+COMMAND: ./stop.sh
+EXIT_CODE: 0
+Bixi Seed 已停止。

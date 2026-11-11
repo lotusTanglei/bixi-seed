@@ -1,0 +1,55 @@
+[
+  {
+    "command": [
+      ".venv/bin/pytest",
+      "-q"
+    ],
+    "cwd": "/Users/dundundebaba/sync/code/open/bixi-seed",
+    "exit_code": 0,
+    "evidence": "pytest.txt"
+  },
+  {
+    "command": [
+      ".venv/bin/python",
+      "manage.py",
+      "makemigrations",
+      "--check",
+      "--dry-run"
+    ],
+    "cwd": "/Users/dundundebaba/sync/code/open/bixi-seed",
+    "exit_code": 0,
+    "evidence": "migrations-check.txt"
+  },
+  {
+    "command": [
+      ".venv/bin/python",
+      "manage.py",
+      "check"
+    ],
+    "cwd": "/Users/dundundebaba/sync/code/open/bixi-seed",
+    "exit_code": 0,
+    "evidence": "django-check.txt"
+  },
+  {
+    "command": [
+      "npm",
+      "exec",
+      "vue-tsc",
+      "--",
+      "--noEmit"
+    ],
+    "cwd": "/Users/dundundebaba/sync/code/open/bixi-seed/frontend",
+    "exit_code": 0,
+    "evidence": "vue-tsc.txt"
+  },
+  {
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "cwd": "/Users/dundundebaba/sync/code/open/bixi-seed/frontend",
+    "exit_code": 0,
+    "evidence": "vite-build.txt"
+  }
+]

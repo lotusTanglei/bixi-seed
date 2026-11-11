@@ -1,0 +1,12 @@
+{
+  "owner": {
+    "username": "maintenance-owner-a893dcf4",
+    "user_id": 1,
+    "organization_id": "2b7dd85d-2d03-4e92-b534-7f7992564ca1"
+  },
+  "foreign": {
+    "username": "maintenance-foreign-a893dcf4",
+    "user_id": 2,
+    "organization_id": "8d833acd-34f3-44ad-8041-ced10f54311d"
+  }
+}

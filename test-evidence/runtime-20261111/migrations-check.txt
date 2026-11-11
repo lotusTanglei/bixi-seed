@@ -1,0 +1,4 @@
+COMMAND: .venv/bin/python manage.py makemigrations --check --dry-run
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed
+EXIT_CODE: 0
+No changes detected

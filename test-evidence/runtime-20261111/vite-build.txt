@@ -1,0 +1,21 @@
+COMMAND: npm run build
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed/frontend
+EXIT_CODE: 0
+
+> bixi-seed-web@0.1.0 build
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 1639 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.46 kB │ gzip:   0.29 kB
+dist/assets/index-BC1dJ6i3.css    376.04 kB │ gzip:  51.10 kB
+dist/assets/index-DDEqsW5_.js   1,141.00 kB │ gzip: 370.35 kB
+✓ built in 4.78s
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

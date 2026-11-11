@@ -1,0 +1,155 @@
+{
+  "integrity": "ok",
+  "preserved_tables": [
+    {
+      "table": "accounts_user",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "accounts_user_groups",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "accounts_user_user_permissions",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "ai_conversation",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "ai_featureproposal",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "ai_llmproviderconfig",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "ai_message",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "auth_group",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "auth_group_permissions",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "auth_permission",
+      "original_rows_preserved": 84,
+      "original_rows_sha256": "7624e9f59a827a2ce5235bc4da87267afe04c13dbffdb6d4d5a29f70a73845f7",
+      "post_rows": 92
+    },
+    {
+      "table": "core_sitesettings",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "django_admin_log",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "django_content_type",
+      "original_rows_preserved": 21,
+      "original_rows_sha256": "0d7f86526c23cc2a49c70e3081da751d0004ab1b5e60350546459b090754dcd4",
+      "post_rows": 23
+    },
+    {
+      "table": "django_migrations",
+      "original_rows_preserved": 36,
+      "original_rows_sha256": "0b66988f3907820cc94f61ab3e243e778fd8dd5d44c0dbf70e99d8774cd945bf",
+      "post_rows": 40
+    },
+    {
+      "table": "django_session",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "features_feature",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "features_featurerecord",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "features_featureversion",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_auditlog",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_memberinvitation",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_membership",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_organization",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_permission",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_role",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    },
+    {
+      "table": "organizations_rolepermission",
+      "original_rows_preserved": 0,
+      "original_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "post_rows": 0
+    }
+  ]
+}

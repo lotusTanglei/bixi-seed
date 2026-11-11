@@ -1,0 +1,3 @@
+COMMAND: npm exec vue-tsc -- --noEmit
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed/frontend
+EXIT_CODE: 0

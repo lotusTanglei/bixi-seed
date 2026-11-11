@@ -1,0 +1,5 @@
+System check identified no issues (0 silenced).
+Operations to perform:
+  Apply all migrations: accounts, admin, ai, auth, contenttypes, core, extensions, features, organizations, sessions
+Running migrations:
+  No migrations to apply.

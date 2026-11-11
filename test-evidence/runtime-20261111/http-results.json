@@ -1,0 +1,514 @@
+{
+  "transport": "real loopback HTTP",
+  "model_mocked": false,
+  "passed": true,
+  "http_check_count": 53,
+  "audit_action_counts": {
+    "ai.tool.plan_failed": 1,
+    "ai.tool.revert_failed": 1,
+    "feature.record.updated": 3,
+    "ai.tool.confirmed": 4,
+    "ai.tool.proposed": 4,
+    "ai.tool.reverted": 3,
+    "feature.record.reverted": 3,
+    "feature.record.deleted": 1,
+    "feature.record.created": 2,
+    "ai.tool.rejected": 2,
+    "feature.published": 1,
+    "feature.created": 1,
+    "extension.draft.enable_denied": 3,
+    "extension.draft.enabled": 1,
+    "extension.draft.validated": 1,
+    "extension.draft.created": 1,
+    "auth.login.succeeded": 1
+  },
+  "e7_status": "enabled_in_catalog_only_not_loaded_or_executed",
+  "e6_fixed_operations": [
+    "create",
+    "update",
+    "delete"
+  ],
+  "real_model_status": "BLOCKED_no_organization_model_configuration_HTTP_422",
+  "running_status_exit": 0,
+  "stop_exit": 0,
+  "stopped_status_exit": 1,
+  "events": [
+    {
+      "check": "health",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/health/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-index",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-static-asset",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/static/assets/index-DDEqsW5_.js",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "frontend-static-asset",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/static/assets/index-BC1dJ6i3.css",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "csrf",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/auth/csrf/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "login",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/auth/login/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "csrf",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/auth/csrf/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "login",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/auth/login/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "authenticated-me",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/auth/me/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-catalog-empty",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "extension-validate",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/validate/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-confirmation-required",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "extension-stale-hash-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "foreign-catalog-is-empty",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "foreign-extension-validate-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/validate/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-extension-enable-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/enable/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "extension-confirm-enable",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/enable/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "extension-repeat-enable-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/extensions/drafts/2/enable/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "extension-catalog-enabled",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/extensions/drafts/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "feature-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "feature-publish",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/publish/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-catalog",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/ai/tools/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "no-execution-before-confirm",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-confirmation-required",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/confirm/",
+      "expected": 400,
+      "actual": 400,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-detail-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "GET",
+      "path": "/api/ai/tool-proposals/2/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-confirm-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/confirm/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "foreign-tool-revoke-denied",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/revoke/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "tool-confirm-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/confirm/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-repeat-confirm-denied",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/confirm/",
+      "expected": 400,
+      "actual": 400,
+      "passed": true
+    },
+    {
+      "check": "tool-revoke-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/2/revoke/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-create-compensated",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "fixture-record-create",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-update",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "tool-confirm-update",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/3/confirm/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-updated-data",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-revoke-update",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/3/revoke/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-update-compensated",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-delete",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "tool-confirm-delete",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/4/confirm/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-deleted-data",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "check": "tool-revoke-delete",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/4/revoke/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-delete-compensated",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-propose-update",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "check": "tool-confirm-before-concurrent-change",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/5/confirm/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "later-record-write",
+      "actor": "fixture-owner",
+      "method": "PATCH",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "tool-cannot-overwrite-later-write",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-proposals/5/revoke/",
+      "expected": 409,
+      "actual": 409,
+      "passed": true
+    },
+    {
+      "check": "later-record-write-preserved",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "real-model-not-configured",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/ai/tool-plan/",
+      "expected": 422,
+      "actual": 422,
+      "passed": true
+    },
+    {
+      "check": "organization-audit",
+      "actor": "fixture-owner",
+      "method": "GET",
+      "path": "/api/organizations/audit-logs/?page_size=100",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "fixture-logout",
+      "actor": "fixture-owner",
+      "method": "POST",
+      "path": "/api/auth/logout/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "check": "fixture-logout",
+      "actor": "fixture-foreign-owner",
+      "method": "POST",
+      "path": "/api/auth/logout/",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    }
+  ]
+}

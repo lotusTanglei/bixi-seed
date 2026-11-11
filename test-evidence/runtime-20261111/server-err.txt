@@ -1,0 +1,35 @@
+INFO:     Started server process [52564]
+INFO:     Waiting for application startup.
+INFO:     ASGI 'lifespan' protocol appears unsupported.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+/Users/dundundebaba/sync/code/open/bixi-seed/.venv/lib/python3.14/site-packages/django/core/handlers/asgi.py:336: Warning: StreamingHttpResponse must consume synchronous iterators in order to serve them asynchronously. Use an asynchronous iterator instead.
+  async for part in content:
+Conflict: /api/extensions/drafts/2/enable/
+[2026-11-11 16:45:14,044] WARNING django.request: Conflict: /api/extensions/drafts/2/enable/
+Conflict: /api/extensions/drafts/2/enable/
+[2026-11-11 16:45:14,053] WARNING django.request: Conflict: /api/extensions/drafts/2/enable/
+Not Found: /api/extensions/drafts/2/validate/
+[2026-11-11 16:45:14,064] WARNING django.request: Not Found: /api/extensions/drafts/2/validate/
+Not Found: /api/extensions/drafts/2/enable/
+[2026-11-11 16:45:14,070] WARNING django.request: Not Found: /api/extensions/drafts/2/enable/
+Conflict: /api/extensions/drafts/2/enable/
+[2026-11-11 16:45:14,239] WARNING django.request: Conflict: /api/extensions/drafts/2/enable/
+Bad Request: /api/ai/tool-proposals/2/confirm/
+[2026-11-11 16:45:14,319] WARNING django.request: Bad Request: /api/ai/tool-proposals/2/confirm/
+Not Found: /api/ai/tool-proposals/2/
+[2026-11-11 16:45:14,326] WARNING django.request: Not Found: /api/ai/tool-proposals/2/
+Not Found: /api/ai/tool-proposals/2/confirm/
+[2026-11-11 16:45:14,335] WARNING django.request: Not Found: /api/ai/tool-proposals/2/confirm/
+Not Found: /api/ai/tool-proposals/2/revoke/
+[2026-11-11 16:45:14,345] WARNING django.request: Not Found: /api/ai/tool-proposals/2/revoke/
+Bad Request: /api/ai/tool-proposals/2/confirm/
+[2026-11-11 16:45:14,369] WARNING django.request: Bad Request: /api/ai/tool-proposals/2/confirm/
+Not Found: /api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/
+[2026-11-11 16:45:14,489] WARNING django.request: Not Found: /api/features/0109d591-0fd8-45c1-a92e-f2fc52c69e41/records/4/
+Conflict: /api/ai/tool-proposals/5/revoke/
+[2026-11-11 16:45:14,573] WARNING django.request: Conflict: /api/ai/tool-proposals/5/revoke/
+Unprocessable Content: /api/ai/tool-plan/
+[2026-11-11 16:45:14,594] WARNING django.request: Unprocessable Content: /api/ai/tool-plan/
+INFO:     Shutting down
+INFO:     Finished server process [52564]

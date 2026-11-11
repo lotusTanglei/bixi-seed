@@ -1,0 +1,4 @@
+COMMAND: .venv/bin/python manage.py check
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed
+EXIT_CODE: 0
+System check identified no issues (0 silenced).

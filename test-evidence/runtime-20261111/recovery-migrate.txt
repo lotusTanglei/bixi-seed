@@ -1,0 +1,10 @@
+COMMAND: .venv/bin/python manage.py migrate --noinput
+BIXI_DATA_DIR: /Users/dundundebaba/sync/code/open/bixi-seed/data/backups/maintenance-20261111-local-upgrade/recovery-check
+EXIT_CODE: 0
+Operations to perform:
+  Apply all migrations: accounts, admin, ai, auth, contenttypes, core, extensions, features, organizations, sessions
+Running migrations:
+  Applying ai.0006_toolcallproposal... OK
+  Applying organizations.0006_role_data_scope... OK
+  Applying extensions.0001_initial... OK
+  Applying extensions.0002_controlled_catalog_review... OK

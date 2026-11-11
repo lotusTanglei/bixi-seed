@@ -1,0 +1,3 @@
+COMMAND: ./backup.sh
+EXIT_CODE: 0
+数据库备份完成: /Users/dundundebaba/sync/code/open/bixi-seed/data/backups/db-20261111-163853.sqlite3
