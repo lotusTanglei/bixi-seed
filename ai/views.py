@@ -428,9 +428,12 @@ def _tool_context(request, tool, arguments):
         diff = {"added": data, "changed": {}, "removed": {}}
         return feature, None, preview, diff, None
     membership = get_active_membership(request)
-    record = scoped_records(FeatureRecord.objects.all(), membership).filter(
-        feature=feature, id=arguments.get("record_id")
-    ).first()
+    try:
+        record = scoped_records(FeatureRecord.objects.all(), membership).filter(
+            feature=feature, id=arguments.get("record_id")
+        ).first()
+    except (TypeError, ValueError):
+        return None, None, None, None, "数据记录编号无效"
     if record is None:
         return None, None, None, None, "数据记录不存在或超出数据范围"
     if tool == "feature.record.delete":
