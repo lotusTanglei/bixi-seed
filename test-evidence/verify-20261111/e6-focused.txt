@@ -1,0 +1,5 @@
+COMMAND: .venv/bin/pytest -q ai/tests/test_tool_calls.py ai/tests/test_tool_planning.py ai/tests/test_feature_planning.py
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed
+EXIT_CODE: 0
+........................                                                 [100%]
+24 passed in 3.00s

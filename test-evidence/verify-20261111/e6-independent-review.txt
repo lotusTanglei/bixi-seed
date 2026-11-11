@@ -1,0 +1,11 @@
+test_ai_permission_revocation_during_model_call (__main__.ModelReview.test_ai_permission_revocation_during_model_call) ... [2026-11-11 16:11:23,315] WARNING django.request: Forbidden: /api/ai/tool-plan/
+ok
+test_membership_revocation_during_model_call (__main__.ModelReview.test_membership_revocation_during_model_call) ... [2026-11-11 16:11:23,396] WARNING django.request: Forbidden: /api/ai/tool-plan/
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.013s
+
+OK
+REVOKE_MEMBERSHIP False PLAN_STATUS 403
+REVOKE_MEMBERSHIP True PLAN_STATUS 403

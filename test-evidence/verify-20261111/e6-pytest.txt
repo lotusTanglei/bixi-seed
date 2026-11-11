@@ -1,0 +1,6 @@
+COMMAND: .venv/bin/pytest -q
+CWD: /Users/dundundebaba/sync/code/open/bixi-seed
+EXIT_CODE: 0
+........................................................................ [ 84%]
+.............                                                            [100%]
+85 passed in 6.96s

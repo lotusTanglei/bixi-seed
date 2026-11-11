@@ -95,7 +95,7 @@ class FeaturePlanningApiTest(TestCase):
         self.assertEqual(response.status_code, 201)
         proposal_id = response.json()["id"]
         self.assertFalse(FeatureRecord.objects.exists())
-        self.assertEqual(self.client.post(f"/api/ai/tool-proposals/{proposal_id}/revoke/", {}).status_code, 200)
+        self.assertEqual(self.client.post(f"/api/ai/tool-proposals/{proposal_id}/revoke/", {"confirm": True}, content_type="application/json").status_code, 200)
         self.assertFalse(FeatureRecord.objects.exists())
 
     def test_confirmed_tool_creates_record_after_preview(self):

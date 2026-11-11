@@ -13,6 +13,7 @@ from .views import (
     ToolCallProposalDetailView,
     ToolCallProposalConfirmView,
     ToolCallProposalRevokeView,
+    ToolCallPlanView,
 )
 
 
@@ -25,6 +26,7 @@ urlpatterns = [
     path("feature-proposals/<int:proposal_id>/confirm/", FeatureProposalConfirmView.as_view(), name="feature-proposal-confirm"),
     path("feature-proposals/<int:proposal_id>/reject/", FeatureProposalRejectView.as_view(), name="feature-proposal-reject"),
     path("tools/", ToolCatalogView.as_view(), name="tool-catalog"),
+    path("tool-plan/", ToolCallPlanView.as_view(), name="tool-plan"),
     path("tool-proposals/", ToolCallProposalListView.as_view(), name="tool-proposal-list"),
     path("tool-proposals/<int:proposal_id>/", ToolCallProposalDetailView.as_view(), name="tool-proposal-detail"),
     path("tool-proposals/<int:proposal_id>/confirm/", ToolCallProposalConfirmView.as_view(), name="tool-proposal-confirm"),

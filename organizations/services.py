@@ -105,7 +105,8 @@ def get_active_organization(request):
 
 
 def get_active_membership(request):
-    get_active_organization(request)
+    if get_active_organization(request) is None:
+        return None
     return getattr(request, "active_membership", None)
 
 

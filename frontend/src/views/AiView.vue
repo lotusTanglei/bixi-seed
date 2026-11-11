@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import { api, apiStream } from "../api/http";
 import { useSessionStore } from "../stores/session";
@@ -29,6 +29,24 @@ interface FeatureProposal {
   manifest: { fields: Array<{ key: string; label: string; type: string; required?: boolean }> };
   status: "proposed" | "created" | "rejected";
   feature_id: string | null;
+}
+
+interface ToolSpec {
+  name: string;
+  risk: "medium" | "high";
+  description: string;
+}
+
+interface ToolProposal {
+  id: number;
+  tool: string;
+  risk: "medium" | "high";
+  status: "proposed" | "confirmed" | "revoked" | "failed";
+  preview: Record<string, unknown>;
+  diff: { fields: unknown; permissions: unknown; data: unknown };
+  result: Record<string, unknown>;
+  error_message: string;
+  can_revoke: boolean;
 }
 
 type PromptTemplateKind = "custom" | "ledger" | "dashboard" | "form" | "workflow";
@@ -74,6 +92,13 @@ const session = useSessionStore();
 const canConfigureAi = computed(() => session.hasPermission("ai.configure"));
 const canUseAi = computed(() => session.hasPermission("ai.use"));
 const canManageFeatures = computed(() => session.hasPermission("feature.manage"));
+const tools = ref<ToolSpec[]>([]);
+const toolProposal = ref<ToolProposal | null>(null);
+const toolBusy = ref(false);
+let toolGeneration = 0;
+const toolForm = reactive({ tool: "feature.record.create", featureId: "", recordId: 1, data: '{"name": ""}', requirement: "" });
+const selectedTool = computed(() => tools.value.find((item) => item.name === toolForm.tool));
+const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 const promptTemplates: PromptTemplate[] = [
   {
     key: "custom",
@@ -185,7 +210,7 @@ const selectedTemplateDefinition = computed(
   () => promptTemplates.find((template) => template.key === selectedTemplate.value) ?? promptTemplates[0],
 );
 const activeWorkspaceMode = computed({
-  get: () => (canManageFeatures.value ? workspaceMode.value : "chat"),
+  get: () => (workspaceMode.value === "planner" && !canManageFeatures.value ? "chat" : workspaceMode.value),
   set: (value: string) => {
     workspaceMode.value = value;
   },
@@ -241,6 +266,100 @@ onMounted(async () => {
     ElMessage.error(error instanceof Error ? error.message : "无法加载 AI 配置");
   }
 });
+
+watch(() => [session.activeOrganizationId, canUseAi.value], () => {
+  toolGeneration += 1;
+  toolProposal.value = null;
+  tools.value = [];
+  toolForm.featureId = "";
+  toolForm.recordId = 1;
+  toolForm.data = '{"name": ""}';
+  toolForm.requirement = "";
+  toolBusy.value = false;
+  if (canUseAi.value) void loadTools(toolGeneration);
+}, { immediate: true });
+
+async function loadTools(generation: number) {
+  const organizationId = session.activeOrganizationId;
+  try {
+    const result = await api<ToolSpec[]>("/ai/tools/");
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) tools.value = result;
+  } catch (error) {
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) ElMessage.error(error instanceof Error ? error.message : "无法加载受控工具");
+  }
+}
+
+async function previewTool() {
+  const generation = toolGeneration;
+  const organizationId = session.activeOrganizationId;
+  toolBusy.value = true;
+  try {
+    const arguments_: Record<string, unknown> = { feature_id: toolForm.featureId.trim() };
+    if (toolForm.tool !== "feature.record.create") arguments_.record_id = toolForm.recordId;
+    if (toolForm.tool !== "feature.record.delete") {
+      const data: unknown = JSON.parse(toolForm.data);
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("数据字段必须是 JSON 对象");
+      arguments_.data = data;
+    }
+    const result = await api<ToolProposal>("/ai/tool-proposals/", {
+      method: "POST", body: { tool: toolForm.tool, arguments: arguments_ },
+    });
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) toolProposal.value = result;
+  } catch (error) {
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) ElMessage.error(error instanceof Error ? error.message : "方案预览失败");
+  } finally {
+    if (generation === toolGeneration) toolBusy.value = false;
+  }
+}
+
+async function planTool() {
+  const generation = toolGeneration;
+  const organizationId = session.activeOrganizationId;
+  toolBusy.value = true;
+  try {
+    const result = await api<ToolProposal>("/ai/tool-plan/", { method: "POST", body: {
+      feature_id: toolForm.featureId.trim(), requirement: toolForm.requirement.trim(),
+    } });
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) toolProposal.value = result;
+  } catch (error) {
+    if (generation === toolGeneration && organizationId === session.activeOrganizationId) ElMessage.error(error instanceof Error ? error.message : "AI 工具规划失败");
+  } finally {
+    if (generation === toolGeneration) toolBusy.value = false;
+  }
+}
+
+async function processTool(action: "confirm" | "revoke") {
+  if (!toolProposal.value || toolBusy.value) return;
+  const current = toolProposal.value;
+  const generation = toolGeneration;
+  const organizationId = session.activeOrganizationId;
+  try {
+    await ElMessageBox.confirm(
+      action === "confirm" ? `确认执行此${current.risk === "high" ? "高" : "中"}风险方案？请先审查字段、权限和数据差异。`
+        : current.status === "confirmed" ? "确认撤销已执行变更？系统将重新校验权限和数据版本。" : "确认撤销此未执行方案？",
+      "确认工具操作", { type: "warning", confirmButtonText: "确认", cancelButtonText: "取消" },
+    );
+    if (generation !== toolGeneration || organizationId !== session.activeOrganizationId) return;
+    toolBusy.value = true;
+    const result = await api<ToolProposal>(`/ai/tool-proposals/${current.id}/${action}/`, { method: "POST", body: { confirm: true } });
+    if (generation !== toolGeneration || organizationId !== session.activeOrganizationId) return;
+    toolProposal.value = result;
+    ElMessage.success(action === "confirm" ? "工具已执行" : "方案已撤销");
+  } catch (error) {
+    if (generation !== toolGeneration || organizationId !== session.activeOrganizationId) return;
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error instanceof Error ? error.message : "工具操作失败");
+    // Never retain sensitive previews after a permission or scope change.
+    try {
+      const result = await api<ToolProposal>(`/ai/tool-proposals/${current.id}/`);
+      if (generation === toolGeneration && organizationId === session.activeOrganizationId) toolProposal.value = result;
+    } catch {
+      if (generation === toolGeneration && organizationId === session.activeOrganizationId) toolProposal.value = null;
+    }
+  } finally {
+    if (generation === toolGeneration) toolBusy.value = false;
+  }
+}
 
 async function saveConfig() {
   saving.value = true;
@@ -426,7 +545,7 @@ async function routerPushFeature(featureId: string) {
       <div class="section-heading">
         <div>
           <h2>AI 工作区</h2>
-          <p>{{ canManageFeatures ? "选择一种方式开始，当前只展示一个工作区。" : "输入问题或需求，与 AI 进行对话。" }}</p>
+          <p>选择功能规划、受控记录工具或自由对话。</p>
         </div>
       </div>
       <el-tabs v-model="activeWorkspaceMode" class="ai-workspace-tabs">
@@ -509,6 +628,36 @@ async function routerPushFeature(featureId: string) {
             <el-button v-if="proposal.status === 'created'" type="primary" :loading="confirming" @click="publishProposal">确认发布</el-button>
           </div>
         </div>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="受控记录工具" name="tools">
+          <p>选择已开放的记录操作，审查预览后确认执行。已执行变更可在数据未被后续修改时确认撤销。</p>
+          <el-form label-position="top">
+            <el-form-item label="记录操作">
+              <el-select v-model="toolForm.tool">
+                <el-option v-for="tool in tools" :key="tool.name" :label="tool.description" :value="tool.name" />
+              </el-select>
+              <el-tag v-if="selectedTool" :type="selectedTool.risk === 'high' ? 'danger' : 'warning'">{{ selectedTool.risk === "high" ? "高风险" : "中风险" }}</el-tag>
+            </el-form-item>
+            <el-form-item label="已发布功能编号"><el-input v-model="toolForm.featureId" placeholder="功能页面地址中的 UUID" /></el-form-item>
+            <el-form-item label="让 AI 规划记录操作"><el-input v-model="toolForm.requirement" type="textarea" :rows="3" placeholder="描述新增、修改或删除需求；修改和删除请提供明确记录编号。AI 只生成待确认方案。" /></el-form-item>
+            <el-button :loading="toolBusy" :disabled="!toolForm.featureId.trim() || !toolForm.requirement.trim()" @click="planTool">让 AI 生成工具方案</el-button>
+            <el-form-item v-if="toolForm.tool !== 'feature.record.create'" label="记录编号"><el-input-number v-model="toolForm.recordId" :min="1" :precision="0" /></el-form-item>
+            <el-form-item v-if="toolForm.tool !== 'feature.record.delete'" label="数据字段（JSON 对象）"><el-input v-model="toolForm.data" type="textarea" :rows="4" /></el-form-item>
+            <el-button :loading="toolBusy" :disabled="!toolForm.featureId.trim()" @click="previewTool">生成方案预览</el-button>
+          </el-form>
+          <div v-if="toolProposal" class="proposal-preview">
+            <div class="proposal-title"><strong>{{ toolProposal.tool }}</strong><el-tag :type="toolProposal.risk === 'high' ? 'danger' : 'warning'">{{ toolProposal.risk === "high" ? "高风险" : "中风险" }} · {{ toolProposal.status }}</el-tag></div>
+            <el-collapse>
+              <el-collapse-item title="字段定义" name="fields"><pre style="overflow: auto">{{ pretty(toolProposal.diff.fields) }}</pre></el-collapse-item>
+              <el-collapse-item title="权限与数据范围" name="permissions"><pre style="overflow: auto">{{ pretty(toolProposal.diff.permissions) }}</pre></el-collapse-item>
+              <el-collapse-item title="数据差异" name="data"><pre style="overflow: auto">{{ pretty(toolProposal.diff.data) }}</pre></el-collapse-item>
+            </el-collapse>
+            <p v-if="toolProposal.error_message">{{ toolProposal.error_message }}</p>
+            <div class="proposal-actions">
+              <el-button v-if="toolProposal.status === 'proposed'" type="primary" :loading="toolBusy" @click="processTool('confirm')">审查后确认执行</el-button>
+              <el-button v-if="toolProposal.can_revoke" type="danger" plain :loading="toolBusy" @click="processTool('revoke')">{{ toolProposal.status === "confirmed" ? "撤销已执行变更" : "撤销方案" }}</el-button>
+            </div>
           </div>
         </el-tab-pane>
         <el-tab-pane label="自由对话" name="chat">
