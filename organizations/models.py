@@ -50,6 +50,7 @@ class Role(models.Model):
     name = models.CharField(max_length=120)
     description = models.CharField(max_length=300, blank=True)
     is_system = models.BooleanField(default=False)
+    data_scope = models.JSONField(default=dict)
     permissions = models.ManyToManyField(Permission, through="RolePermission", related_name="roles")
     created_at = models.DateTimeField(auto_now_add=True)
 

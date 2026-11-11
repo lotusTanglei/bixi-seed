@@ -92,3 +92,28 @@ class FeatureProposal(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class ToolCallProposal(models.Model):
+    STATUS_CHOICES = [
+        ("proposed", "Proposed"),
+        ("confirmed", "Confirmed"),
+        ("revoked", "Revoked"),
+        ("failed", "Failed"),
+    ]
+    RISK_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="tool_call_proposals")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tool_call_proposals")
+    tool = models.CharField(max_length=120)
+    risk = models.CharField(max_length=20, choices=RISK_CHOICES)
+    arguments = models.JSONField(default=dict)
+    preview = models.JSONField(default=dict)
+    diff = models.JSONField(default=dict)
+    result = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="proposed")
+    error_message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "organizations",
     "ai",
     "features",
+    "extensions",
 ]
 
 MIDDLEWARE = [

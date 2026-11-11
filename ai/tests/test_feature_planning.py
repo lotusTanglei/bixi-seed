@@ -6,6 +6,7 @@ from django.test import TestCase
 from accounts.models import User
 from ai.models import FeatureProposal
 from features.models import Feature
+from features.models import FeatureRecord
 from organizations.models import Permission
 from organizations.services import DEFAULT_PERMISSIONS, create_organization
 
@@ -33,9 +34,9 @@ class FeaturePlanningApiTest(TestCase):
                 for code, name, description in DEFAULT_PERMISSIONS
             ]
         )
-        user = User.objects.create_user("planner@example.com", "test-password-123")
-        create_organization(user=user, name="AI 组织")
-        self.client.force_login(user)
+        self.user = User.objects.create_user("planner@example.com", "test-password-123")
+        create_organization(user=self.user, name="AI 组织")
+        self.client.force_login(self.user)
 
     @patch("ai.views.get_provider", return_value=FakeProvider())
     def test_plan_requires_confirmation_and_publish(self, provider):
@@ -73,3 +74,53 @@ class FeaturePlanningApiTest(TestCase):
         proposal_id = response.json()["id"]
         self.assertEqual(self.client.post(f"/api/ai/feature-proposals/{proposal_id}/reject/", {}).status_code, 200)
         self.assertEqual(self.client.post(f"/api/ai/feature-proposals/{proposal_id}/reject/", {}).status_code, 400)
+
+    def test_tool_proposal_requires_confirmation_and_writes_audit(self):
+        feature = Feature.objects.create(
+            organization=self.user.memberships.first().organization,
+            key="tool-feature",
+            name="工具功能",
+            status="published",
+            manifest={"version": 1, "fields": [{"key": "name", "label": "名称", "type": "text"}]},
+            created_by=self.user,
+        )
+        response = self.client.get("/api/ai/tools/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("feature.record.create", [item["name"] for item in response.json()])
+        response = self.client.post(
+            "/api/ai/tool-proposals/",
+            {"tool": "feature.record.create", "arguments": {"feature_id": str(feature.pk), "data": {"name": "客户"}}},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        proposal_id = response.json()["id"]
+        self.assertFalse(FeatureRecord.objects.exists())
+        self.assertEqual(self.client.post(f"/api/ai/tool-proposals/{proposal_id}/revoke/", {}).status_code, 200)
+        self.assertFalse(FeatureRecord.objects.exists())
+
+    def test_confirmed_tool_creates_record_after_preview(self):
+        feature = Feature.objects.create(
+            organization=self.user.memberships.first().organization,
+            key="tool-confirm",
+            name="工具确认",
+            status="published",
+            manifest={"version": 1, "fields": [{"key": "name", "label": "名称", "type": "text"}]},
+            created_by=self.user,
+        )
+        response = self.client.post(
+            "/api/ai/tool-proposals/",
+            {"tool": "feature.record.create", "arguments": {"feature_id": str(feature.pk), "data": {"name": "确认"}}},
+            content_type="application/json",
+        )
+        proposal_id = response.json()["id"]
+        response = self.client.post(
+            f"/api/ai/tool-proposals/{proposal_id}/confirm/",
+            {"confirm": True},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "confirmed")
+        self.assertEqual(FeatureRecord.objects.get().data["name"], "确认")
+        self.assertTrue(
+            self.user.memberships.first().organization.audit_logs.filter(action="ai.tool.confirmed").exists()
+        )

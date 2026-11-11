@@ -20,6 +20,7 @@ from .services import (
     get_active_organization,
     get_active_membership,
     get_user_memberships,
+    normalize_data_scope,
     membership_has_permission,
     organization_path,
     sync_membership_status,
@@ -78,6 +79,7 @@ def role_payload(item):
         "name": item.name,
         "description": item.description,
         "is_system": item.is_system,
+        "data_scope": item.data_scope or {"mode": "all"},
         "member_count": member_count,
         "permissions": [permission.code for permission in item.permissions.all()],
     }
@@ -323,6 +325,51 @@ class MemberDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class MemberBatchRoleView(APIView):
+    """Assign one existing role to several members atomically."""
+
+    @transaction.atomic
+    def post(self, request):
+        if not user_has_permission(request, "role.manage"):
+            return Response({"detail": "没有批量授权的权限"}, status=status.HTTP_403_FORBIDDEN)
+        current = get_active_membership(request)
+        user_ids = request.data.get("user_ids")
+        if not isinstance(user_ids, list) or not user_ids or len(user_ids) > 200:
+            return Response({"detail": "user_ids 必须是 1 到 200 项的数组"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_ids = list(dict.fromkeys(int(item) for item in user_ids))
+        except (TypeError, ValueError):
+            return Response({"detail": "user_ids 必须是用户编号数组"}, status=status.HTTP_400_BAD_REQUEST)
+        role = Role.objects.filter(organization=current.organization, id=request.data.get("role_id")).first()
+        if role is None:
+            return Response({"detail": "角色不存在"}, status=status.HTTP_400_BAD_REQUEST)
+        if role.is_system and role.code == "owner":
+            return Response({"detail": "不能批量分配所有者角色"}, status=status.HTTP_400_BAD_REQUEST)
+        if not can_assign_role(current, role):
+            return Response({"detail": "不能分配权限高于当前账号的角色"}, status=status.HTTP_403_FORBIDDEN)
+        targets = list(
+            Membership.objects.select_for_update().select_related("user", "role").filter(
+                organization=current.organization, user_id__in=user_ids
+            )
+        )
+        if len(targets) != len(user_ids):
+            return Response({"detail": "包含不存在的组织成员"}, status=status.HTTP_404_NOT_FOUND)
+        if any(item.is_owner for item in targets):
+            return Response({"detail": "所有者不能通过批量授权修改"}, status=status.HTTP_400_BAD_REQUEST)
+        for target in targets:
+            target.role = role
+            target.save(update_fields=["role"])
+        write_audit(
+            organization=current.organization,
+            actor=request.user,
+            action="member.roles.batch_updated",
+            object_type="membership",
+            object_id=current.organization.pk,
+            metadata={"user_ids": user_ids, "role_id": role.pk, "role": role.code},
+        )
+        return Response({"updated": [member_payload(item) for item in targets], "role": role_payload(role)})
+
+
 class MemberInvitationListView(APIView):
     def get(self, request):
         if not user_has_permission(request, "member.manage"):
@@ -538,10 +585,13 @@ class RoleListView(APIView):
         code = str(request.data.get("code", "")).strip()
         name = str(request.data.get("name", "")).strip()
         permission_codes = request.data.get("permissions", [])
+        data_scope, data_scope_error = normalize_data_scope(request.data.get("data_scope"))
         if not code or not name or len(name) > 120 or not isinstance(permission_codes, list):
             return Response({"detail": "角色参数不完整"}, status=status.HTTP_400_BAD_REQUEST)
         if not all(isinstance(item, str) for item in permission_codes):
             return Response({"detail": "permissions 必须是字符串数组"}, status=status.HTTP_400_BAD_REQUEST)
+        if data_scope_error:
+            return Response({"detail": data_scope_error}, status=status.HTTP_400_BAD_REQUEST)
         if not code.replace("-", "").replace("_", "").isalnum() or len(code) > 100:
             return Response({"detail": "角色编码格式不正确"}, status=status.HTTP_400_BAD_REQUEST)
         if Role.objects.filter(organization=membership.organization, code=code).exists():
@@ -555,6 +605,7 @@ class RoleListView(APIView):
             code=code,
             name=name,
             description=str(request.data.get("description", "")).strip(),
+            data_scope=data_scope,
         )
         RolePermission.objects.bulk_create(
             [RolePermission(role=role, permission=permission) for permission in permissions_found]
@@ -590,6 +641,7 @@ class RoleDetailView(APIView):
         if role.is_system:
             return Response({"detail": "系统角色不能编辑"}, status=status.HTTP_400_BAD_REQUEST)
         permissions = None
+        data_scope = None
         if "permissions" in request.data:
             codes = request.data["permissions"]
             if not isinstance(codes, list):
@@ -600,6 +652,10 @@ class RoleDetailView(APIView):
             if permission_error:
                 error_status = status.HTTP_403_FORBIDDEN if permission_error.startswith("不能") else status.HTTP_400_BAD_REQUEST
                 return Response({"detail": permission_error}, status=error_status)
+        if "data_scope" in request.data:
+            data_scope, data_scope_error = normalize_data_scope(request.data["data_scope"])
+            if data_scope_error:
+                return Response({"detail": data_scope_error}, status=status.HTTP_400_BAD_REQUEST)
         if "name" in request.data:
             name = str(request.data["name"]).strip()
             if not name or len(name) > 120:
@@ -607,7 +663,9 @@ class RoleDetailView(APIView):
             role.name = name
         if "description" in request.data:
             role.description = str(request.data["description"]).strip()
-        role.save(update_fields=["name", "description"])
+        if data_scope is not None:
+            role.data_scope = data_scope
+        role.save(update_fields=["name", "description", "data_scope"])
         if permissions is not None:
             role.permissions.set(permissions)
         write_audit(
@@ -649,6 +707,47 @@ class RoleDetailView(APIView):
             metadata={},
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RoleCopyView(APIView):
+    @transaction.atomic
+    def post(self, request, role_id):
+        if not user_has_permission(request, "role.manage"):
+            return Response({"detail": "没有管理角色的权限"}, status=status.HTTP_403_FORBIDDEN)
+        current = get_active_membership(request)
+        source = Role.objects.prefetch_related("permissions").filter(
+            organization=current.organization, id=role_id
+        ).first()
+        if source is None:
+            return Response({"detail": "角色不存在"}, status=status.HTTP_404_NOT_FOUND)
+        if not can_assign_role(current, source):
+            return Response({"detail": "不能复制权限高于当前账号的角色"}, status=status.HTTP_403_FORBIDDEN)
+        code = str(request.data.get("code", f"{source.code}-copy")).strip()
+        name = str(request.data.get("name", f"{source.name}副本")).strip()
+        if not code or len(code) > 100 or not code.replace("-", "").replace("_", "").isalnum():
+            return Response({"detail": "角色编码格式不正确"}, status=status.HTTP_400_BAD_REQUEST)
+        if not name or len(name) > 120:
+            return Response({"detail": "角色名称不能为空且不能超过 120 个字符"}, status=status.HTTP_400_BAD_REQUEST)
+        if Role.objects.filter(organization=current.organization, code=code).exists():
+            return Response({"detail": "角色编码已存在"}, status=status.HTTP_400_BAD_REQUEST)
+        role = Role.objects.create(
+            organization=current.organization,
+            code=code,
+            name=name,
+            description=str(request.data.get("description", source.description)).strip()[:300],
+            data_scope=source.data_scope or {"mode": "all"},
+        )
+        role.permissions.set(source.permissions.all())
+        write_audit(
+            organization=current.organization,
+            actor=request.user,
+            action="role.copied",
+            object_type="role",
+            object_id=role.pk,
+            metadata={"source_role_id": source.pk, "source_code": source.code},
+        )
+        role = Role.objects.prefetch_related("permissions").filter(pk=role.pk).get()
+        return Response(role_payload(role), status=status.HTTP_201_CREATED)
 
 
 class PermissionCatalogView(APIView):

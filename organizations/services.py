@@ -47,6 +47,25 @@ PERMISSION_FALLBACKS = {
     "feature.read": {"feature.read", "feature.manage"},
 }
 
+DATA_SCOPE_MODES = {"all", "own"}
+
+
+def normalize_data_scope(value):
+    """Validate the small, explicit E5 data-scope contract."""
+    if value in (None, {}):
+        return {"mode": "all"}, None
+    if not isinstance(value, dict):
+        return None, "data_scope 必须是对象"
+    mode = value.get("mode", "all")
+    if mode not in DATA_SCOPE_MODES or set(value) - {"mode"}:
+        return None, "data_scope.mode 只能是 all 或 own"
+    return {"mode": mode}, None
+
+
+def membership_data_scope(membership):
+    scope, error = normalize_data_scope(getattr(membership.role, "data_scope", None))
+    return scope if error is None else {"mode": "all"}
+
 
 def ensure_default_permissions():
     for code, name, description in DEFAULT_PERMISSIONS:

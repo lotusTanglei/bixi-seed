@@ -9,11 +9,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from features.models import Feature
-from features.services import validate_manifest
+from features.models import Feature, FeatureRecord
+from features.services import feature_permission_code, validate_manifest, validate_record_data
+from features.views import scoped_records, serialize_record
 from organizations.services import get_active_membership, user_has_permission, write_audit
 
-from .models import Conversation, FeatureProposal, LLMProviderConfig, Message
+from .models import Conversation, FeatureProposal, LLMProviderConfig, Message, ToolCallProposal
 from .providers import ProviderConfigurationError, get_provider, parse_json_response
 
 
@@ -52,6 +53,44 @@ def _proposal_payload(proposal):
         "feature_id": str(proposal.feature_id) if proposal.feature_id else None,
         "created_at": proposal.created_at,
         "updated_at": proposal.updated_at,
+    }
+
+
+TOOL_CATALOG = {
+    "feature.record.create": {
+        "risk": "medium",
+        "permission": "create",
+        "description": "创建一条已发布 Feature 数据",
+        "arguments": {"type": "object", "required": ["feature_id", "data"]},
+    },
+    "feature.record.update": {
+        "risk": "high",
+        "permission": "update",
+        "description": "修改一条已发布 Feature 数据",
+        "arguments": {"type": "object", "required": ["feature_id", "record_id", "data"]},
+    },
+    "feature.record.delete": {
+        "risk": "high",
+        "permission": "delete",
+        "description": "删除一条已发布 Feature 数据",
+        "arguments": {"type": "object", "required": ["feature_id", "record_id"]},
+    },
+}
+
+
+def _tool_payload(item):
+    return {
+        "id": item.id,
+        "tool": item.tool,
+        "risk": item.risk,
+        "arguments": item.arguments,
+        "preview": item.preview,
+        "diff": item.diff,
+        "result": item.result,
+        "status": item.status,
+        "error_message": item.error_message,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
     }
 
 
@@ -349,3 +388,225 @@ class FeatureProposalRejectView(APIView):
             metadata={},
         )
         return Response(_proposal_payload(proposal))
+
+
+class ToolCatalogView(APIView):
+    def get(self, request):
+        if not user_has_permission(request, "ai.use"):
+            return Response({"detail": "没有使用 AI 的权限"}, status=status.HTTP_403_FORBIDDEN)
+        return Response(
+            [
+                {"name": name, "risk": spec["risk"], "description": spec["description"], "arguments": spec["arguments"]}
+                for name, spec in TOOL_CATALOG.items()
+            ]
+        )
+
+
+def _tool_context(request, tool, arguments):
+    if not isinstance(arguments, dict):
+        return None, None, None, None, "arguments 必须是对象"
+    try:
+        feature = Feature.objects.get(
+            organization=get_active_membership(request).organization,
+            id=arguments.get("feature_id"),
+            status="published",
+        )
+    except (Feature.DoesNotExist, ValueError, TypeError):
+        return None, None, None, None, "已发布功能不存在"
+    errors = validate_manifest(feature.manifest)
+    if errors:
+        return None, None, None, None, "功能定义不可用"
+    action = TOOL_CATALOG[tool]["permission"]
+    if not user_has_permission(request, feature_permission_code(feature, action)):
+        return None, None, None, None, "没有执行该功能操作的权限"
+    if tool == "feature.record.create":
+        data = arguments.get("data")
+        errors = validate_record_data(feature.manifest, data)
+        if errors:
+            return None, None, None, None, errors
+        preview = {"operation": "create", "feature_id": str(feature.pk), "after": data}
+        diff = {"added": data, "changed": {}, "removed": {}}
+        return feature, None, preview, diff, None
+    membership = get_active_membership(request)
+    record = scoped_records(FeatureRecord.objects.all(), membership).filter(
+        feature=feature, id=arguments.get("record_id")
+    ).first()
+    if record is None:
+        return None, None, None, None, "数据记录不存在或超出数据范围"
+    if tool == "feature.record.delete":
+        before = serialize_record(record, feature)["data"]
+        return (
+            feature,
+            record,
+            {"operation": "delete", "feature_id": str(feature.pk), "record_id": record.pk, "before": before},
+            {"added": {}, "changed": {}, "removed": before},
+            None,
+        )
+    patch_data = arguments.get("data")
+    if not isinstance(patch_data, dict):
+        return None, None, None, None, "data 必须是对象"
+    after = dict(record.data)
+    after.update(patch_data)
+    errors = validate_record_data(feature.manifest, after)
+    if errors:
+        return None, None, None, None, errors
+    before = serialize_record(record, feature)["data"]
+    changed = {key: {"before": before.get(key), "after": after.get(key)} for key in after if before.get(key) != after.get(key)}
+    return (
+        feature,
+        record,
+        {"operation": "update", "feature_id": str(feature.pk), "record_id": record.pk, "before": before, "after": after},
+        {"added": {}, "changed": changed, "removed": {}},
+        None,
+    )
+
+
+class ToolCallProposalListView(APIView):
+    def post(self, request):
+        if not user_has_permission(request, "ai.use"):
+            return Response({"detail": "没有使用 AI 的权限"}, status=status.HTTP_403_FORBIDDEN)
+        tool = str(request.data.get("tool", "")).strip()
+        if tool not in TOOL_CATALOG:
+            return Response({"detail": "工具不存在或未开放"}, status=status.HTTP_400_BAD_REQUEST)
+        arguments = request.data.get("arguments", {})
+        membership = get_active_membership(request)
+        feature, record, preview, diff, error = _tool_context(request, tool, arguments)
+        if error:
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+        proposal = ToolCallProposal.objects.create(
+            organization=membership.organization,
+            user=request.user,
+            tool=tool,
+            risk=TOOL_CATALOG[tool]["risk"],
+            arguments=arguments,
+            preview=preview,
+            diff=diff,
+        )
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="ai.tool.proposed",
+            object_type="tool_call_proposal",
+            object_id=proposal.pk,
+            metadata={"tool": tool, "risk": proposal.risk},
+        )
+        return Response(_tool_payload(proposal), status=status.HTTP_201_CREATED)
+
+
+class ToolCallProposalDetailView(APIView):
+    def _get(self, request, proposal_id):
+        if not user_has_permission(request, "ai.use"):
+            return None, Response({"detail": "没有使用 AI 的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        query = ToolCallProposal.objects.filter(organization=membership.organization, id=proposal_id)
+        if not user_has_permission(request, "feature.manage"):
+            query = query.filter(user=request.user)
+        return query.first(), None
+
+    def get(self, request, proposal_id):
+        proposal, error = self._get(request, proposal_id)
+        if error:
+            return error
+        if proposal is None:
+            return Response({"detail": "方案不存在"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(_tool_payload(proposal))
+
+
+class ToolCallProposalConfirmView(APIView):
+    @transaction.atomic
+    def post(self, request, proposal_id):
+        if request.data.get("confirm") is not True:
+            return Response({"detail": "请确认工具执行"}, status=status.HTTP_400_BAD_REQUEST)
+        if not user_has_permission(request, "ai.use"):
+            return Response({"detail": "没有使用 AI 的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        proposal = ToolCallProposal.objects.select_for_update().filter(
+            organization=membership.organization, id=proposal_id, user=request.user
+        ).first()
+        if proposal is None:
+            return Response({"detail": "方案不存在"}, status=status.HTTP_404_NOT_FOUND)
+        if proposal.status != "proposed":
+            return Response({"detail": "该工具方案已经处理"}, status=status.HTTP_400_BAD_REQUEST)
+        feature, record, preview, diff, error = _tool_context(request, proposal.tool, proposal.arguments)
+        if error:
+            proposal.status = "failed"
+            proposal.error_message = str(error)[:500]
+            proposal.save(update_fields=["status", "error_message", "updated_at"])
+            write_audit(
+                organization=membership.organization,
+                actor=request.user,
+                action="ai.tool.failed",
+                object_type="tool_call_proposal",
+                object_id=proposal.pk,
+                metadata={"tool": proposal.tool, "error": str(error)[:200]},
+                success=False,
+            )
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+        if proposal.tool == "feature.record.create":
+            record = FeatureRecord.objects.create(
+                feature=feature,
+                data=proposal.arguments["data"],
+                created_by=request.user,
+                updated_by=request.user,
+            )
+            result = {"id": str(record.pk), "data": record.data}
+            action = "feature.record.created"
+        elif proposal.tool == "feature.record.update":
+            record.data = preview["after"]
+            record.updated_by = request.user
+            record.save(update_fields=["data", "updated_by", "updated_at"])
+            result = {"id": str(record.pk), "data": record.data}
+            action = "feature.record.updated"
+        else:
+            record_id = record.pk
+            record.delete()
+            result = {"deleted": True, "record_id": record_id}
+            action = "feature.record.deleted"
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action=action,
+            object_type="feature_record",
+            object_id=result.get("id", result.get("record_id", "")),
+            metadata={"feature": feature.key, "via_tool": proposal.tool},
+        )
+        proposal.preview = preview
+        proposal.diff = diff
+        proposal.result = result
+        proposal.status = "confirmed"
+        proposal.save(update_fields=["preview", "diff", "result", "status", "updated_at"])
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="ai.tool.confirmed",
+            object_type="tool_call_proposal",
+            object_id=proposal.pk,
+            metadata={"tool": proposal.tool, "risk": proposal.risk},
+        )
+        return Response(_tool_payload(proposal))
+
+
+class ToolCallProposalRevokeView(APIView):
+    @transaction.atomic
+    def post(self, request, proposal_id):
+        if not user_has_permission(request, "ai.use"):
+            return Response({"detail": "没有使用 AI 的权限"}, status=status.HTTP_403_FORBIDDEN)
+        membership = get_active_membership(request)
+        proposal = ToolCallProposal.objects.select_for_update().filter(
+            organization=membership.organization, id=proposal_id, user=request.user
+        ).first()
+        if proposal is None:
+            return Response({"detail": "方案不存在"}, status=status.HTTP_404_NOT_FOUND)
+        if proposal.status != "proposed":
+            return Response({"detail": "该工具方案已经处理"}, status=status.HTTP_400_BAD_REQUEST)
+        proposal.status = "revoked"
+        proposal.save(update_fields=["status", "updated_at"])
+        write_audit(
+            organization=membership.organization,
+            actor=request.user,
+            action="ai.tool.revoked",
+            object_type="tool_call_proposal",
+            object_id=proposal.pk,
+            metadata={"tool": proposal.tool},
+        )
+        return Response(_tool_payload(proposal))

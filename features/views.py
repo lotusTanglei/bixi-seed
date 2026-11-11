@@ -4,7 +4,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from organizations.services import get_active_membership, user_has_permission, write_audit
+from organizations.services import (
+    get_active_membership,
+    membership_data_scope,
+    user_has_permission,
+    write_audit,
+)
 
 from .models import Feature, FeatureRecord, FeatureVersion
 from .services import (
@@ -78,6 +83,13 @@ def scoped_feature(request, feature_id, *, published_only=False):
 
         raise NotFound("功能定义不可用")
     return feature
+
+
+def scoped_records(queryset, membership):
+    """Apply the role's explicit data scope before serializing records."""
+    if membership_data_scope(membership).get("mode") == "own":
+        return queryset.filter(created_by=membership.user)
+    return queryset
 
 
 class FeatureListView(APIView):
@@ -301,7 +313,13 @@ class FeatureRecordListView(APIView):
         feature, error = self.get_feature(request, feature_id)
         if error:
             return error
-        records = list(FeatureRecord.objects.filter(feature=feature).select_related("created_by", "updated_by"))
+        membership = get_active_membership(request)
+        records = list(
+            scoped_records(
+                FeatureRecord.objects.filter(feature=feature).select_related("created_by", "updated_by"),
+                membership,
+            )
+        )
         search = request.query_params.get("q", "").strip().lower()
         if search:
             search_fields = feature.manifest.get("list", {}).get("search_fields")
@@ -393,7 +411,9 @@ class FeatureRecordListView(APIView):
 class FeatureRecordDetailView(APIView):
     def get_record(self, request, feature_id, record_id):
         feature = scoped_feature(request, feature_id, published_only=True)
-        return feature, get_object_or_404(FeatureRecord, id=record_id, feature=feature)
+        membership = get_active_membership(request)
+        record = get_object_or_404(scoped_records(FeatureRecord.objects.all(), membership), id=record_id, feature=feature)
+        return feature, record
 
     def get(self, request, feature_id, record_id):
         feature, record = self.get_record(request, feature_id, record_id)
