@@ -6,6 +6,7 @@ import OrganizationsView from "../views/OrganizationsView.vue";
 import AiView from "../views/AiView.vue";
 import FeatureView from "../views/FeatureView.vue";
 import SettingsView from "../views/SettingsView.vue";
+import ExtensionsView from "../views/ExtensionsView.vue";
 import { useSessionStore } from "../stores/session";
 
 const router = createRouter({
@@ -21,6 +22,7 @@ const router = createRouter({
     },
     { path: "/ai", name: "ai", component: AiView, meta: { requiresAuth: true, permissions: ["ai.use", "ai.configure"] } },
     { path: "/settings", name: "settings", component: SettingsView, meta: { requiresAuth: true, permissions: ["organization.manage"] } },
+    { path: "/extensions", name: "extensions", component: ExtensionsView, meta: { requiresAuth: true, permissions: ["feature.manage"] } },
     { path: "/features/:featureId", name: "feature", component: FeatureView, meta: { requiresAuth: true, permissions: ["feature.read", "feature.manage"] } },
   ],
 });

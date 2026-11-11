@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ChatDotRound, Grid, OfficeBuilding, Setting, SwitchButton } from "@element-plus/icons-vue";
+import { ChatDotRound, Folder, Grid, OfficeBuilding, Setting, SwitchButton } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 
 import { useSessionStore } from "./stores/session";
@@ -57,6 +57,10 @@ async function handleLogout() {
         <el-menu-item v-if="session.hasAnyPermission(['ai.use', 'ai.configure'])" index="/ai">
           <el-icon class="app-icon app-icon--nav"><ChatDotRound /></el-icon>
           <template #title>AI 助手</template>
+        </el-menu-item>
+        <el-menu-item v-if="session.hasPermission('feature.manage')" index="/extensions">
+          <el-icon class="app-icon app-icon--nav"><Folder /></el-icon>
+          <template #title>扩展草稿</template>
         </el-menu-item>
         <el-menu-item v-if="session.hasPermission('organization.manage')" index="/settings">
           <el-icon class="app-icon app-icon--nav"><Setting /></el-icon>

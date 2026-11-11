@@ -1,0 +1,6 @@
+command=["/Users/dundundebaba/sync/code/open/bixi-seed/.venv/bin/python", "manage.py", "check"]
+cwd=/Users/dundundebaba/sync/code/open/bixi-seed
+started_at=2026-11-11T16:20:16.172209+08:00
+System check identified no issues (0 silenced).
+
+exit_code=0

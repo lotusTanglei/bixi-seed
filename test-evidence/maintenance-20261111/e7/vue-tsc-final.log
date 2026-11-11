@@ -1,0 +1,5 @@
+command=["./node_modules/.bin/vue-tsc", "--noEmit"]
+cwd=/Users/dundundebaba/sync/code/open/bixi-seed/frontend
+started_at=2026-11-11T16:24:30.002249+08:00
+
+exit_code=0

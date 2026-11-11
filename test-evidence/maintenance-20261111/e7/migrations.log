@@ -1,0 +1,6 @@
+command=["/Users/dundundebaba/sync/code/open/bixi-seed/.venv/bin/python", "manage.py", "makemigrations", "--check", "--dry-run"]
+cwd=/Users/dundundebaba/sync/code/open/bixi-seed
+started_at=2026-11-11T16:20:13.697392+08:00
+No changes detected
+
+exit_code=0

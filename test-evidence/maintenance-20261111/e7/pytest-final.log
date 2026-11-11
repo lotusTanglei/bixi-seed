@@ -1,0 +1,8 @@
+command=["/Users/dundundebaba/sync/code/open/bixi-seed/.venv/bin/python", "-m", "pytest", "-q"]
+cwd=/Users/dundundebaba/sync/code/open/bixi-seed
+started_at=2026-11-11T16:24:09.122275+08:00
+........................................................................ [ 74%]
+.........................                                                [100%]
+97 passed in 15.49s
+
+exit_code=0
